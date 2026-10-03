@@ -870,7 +870,7 @@ const EFFECTS = { star: STAR, vine: VINE, stone: STONE, storm: STORM };
  * crit, effect ('super' | 'weak' | 'normal'), scale (1 = normal).
  * Returns { impact: Promise (moment of hit), done: Promise (all visuals removed), shake: suggested shake strength, nodes }.
  */
-export function playSpell(layer, { from, to, element = 'star', family, power = 'basic', stage = 2, crit = false, effect = 'normal', scale = 1, also = [], sparkle = false } = {}) {
+export function playSpell(layer, { from, to, element = 'star', family, power = 'basic', stage = 2, crit = false, effect = 'normal', scale = 1 } = {}) {
   const st = new Scene(layer);
   const el = FX_PAL[element] ? element : 'star';
   const pw = TIMING[power] ? power : 'basic';
@@ -888,13 +888,6 @@ export function playSpell(layer, { from, to, element = 'star', family, power = '
     if (sg === 3) chargeUp(c, from, 0, T0 + 40);
     if (el === 'arcane') ARCANE.any(c); else EFFECTS[el][pw](c);
     impact(c, to, I, { big: pw === 'ultimate' ? 1.25 : pw === 'power' ? 1.1 : 1 });
-    // Moves that hit every enemy: a burst on each of the others too, a beat apart, so the whole row visibly gets hit.
-    also.forEach((p, k) => impact({ ...c, crit: false }, p, I + 70 + k * 70, { big: 0.85 }));
-    // Sparkly (rare variant) pets: a trail of twinkles along the path and around the hit.
-    if (sparkle) {
-      for (let k = 0; k < 7; k++) { const u = k / 6, p = { x: lerp(from.x, to.x, u), y: lerp(from.y, to.y, u) - Math.sin(u * Math.PI) * 50 * s }; twinkles(c, p, T0 + u * (I - T0), 1, 14 * s, ['#fff', '#ffe68a', '#ffc4e0'], 11); }
-      twinkles(c, to, I + 40, 6, 90 * s, ['#fff', '#ffe68a', '#ffc4e0'], 13);
-    }
     if (sg === 3 && pw !== 'ultimate') st.flash(I, c.P.glow, 0.35, 240);
   } catch (err) {
     console.warn('[fx] spell effect failed', err); // never block the battle: promises still resolve on time
@@ -902,106 +895,6 @@ export function playSpell(layer, { from, to, element = 'star', family, power = '
   }
   const shake = +(({ basic: 0.6, power: 1, ultimate: 1.7 })[pw] * (crit ? 1.4 : 1) * (effect === 'super' ? 1.2 : effect === 'weak' ? 0.6 : 1) * [0.85, 1, 1.2][sg - 1] * Math.sqrt(s)).toFixed(2);
   return st.finish(I, { shake, impactAt: I });
-}
-
-/**
- * Effects for moves that aren't attacks, played on the unit they affect (v62: these used to show only floating text).
- * kind: heal | regen | shield | armor | empower | rally | haste | slow | freeze | stun | weaken | taunt | cleanse.
- * Returns { done }.
- */
-export function playBuff(layer, at, { kind = 'heal', element = 'star', scale = 1 } = {}) {
-  const st = new Scene(layer), s = scale, P = FX_PAL[element] || FX_PAL.star;
-  const feet = at.y + 80 * s;
-  const ring = (col, r0, r1, t, dur, w = 7) => { const g = st.g(`<circle r="${n1(60 * s)}" fill="none" stroke="${OL}" stroke-width="${n1((w + 3) * s)}" opacity=".35"/><circle r="${n1(60 * s)}" fill="none" stroke="${col}" stroke-width="${n1(w * s)}"/>`); st.key(g, { x: at.x, y: at.y, s: [r0, r1], o: [0, 1, 0] }, t, dur, 'ease-out'); };
-  const rise = (make, n, t, spread = 70, dist = 120) => { for (let k = 0; k < n; k++) { const x = at.x + rnd(-spread, spread) * s, y0 = at.y + rnd(10, 50) * s; const node = st.g(make(k)); st.key(node, { x: [x, x + rnd(-10, 10) * s], y: [y0, y0 - dist * s], s: [0.2, 1.1, 0.8], r: [0, rnd(-40, 40)], o: [0, 1, 1, 0] }, t + rnd(0, 260), rnd(520, 700), 'ease-out'); } };
-  const plus = (r, fill) => `<path d="M${n1(-r * 0.32)} ${n1(-r)}h${n1(r * 0.64)}v${n1(r * 0.68)}h${n1(r * 0.68)}v${n1(r * 0.64)}h${n1(-r * 0.68)}v${n1(r * 0.68)}h${n1(-r * 0.64)}v${n1(-r * 0.68)}h${n1(-r * 0.68)}v${n1(-r * 0.64)}h${n1(r * 0.68)}Z" fill="${fill}" ${SW(Math.max(2, r * 0.18))}/>`;
-  switch (kind) {
-    case 'heal': case 'cleanse': {
-      const glow = st.g(`<circle r="${n1(90 * s)}" fill="${st.grad([[0, '#fff', 0.9], [0.5, '#c9f7c4', 0.6], [1, '#6fd07a', 0]], true)}"/>`);
-      st.key(glow, { x: at.x, y: at.y, s: [0.3, 1.1, 1.2], o: [0, 0.9, 0] }, 0, 700, 'ease-out');
-      rise((k) => (k % 3 === 2 ? SH.heart(11 * s, '#ff8fb4') : plus(13 * s, k % 2 ? '#6fd07a' : '#aaf0a0')), 9, 0);
-      if (kind === 'cleanse') { ring('#ffffff', 0.4, 1.8, 120, 520, 6); rise((k) => SH.sparkle(12 * s, k % 2 ? '#fff' : '#d8f0ff'), 6, 150); }
-      break;
-    }
-    case 'regen': {
-      rise((k) => (k % 2 ? SH.leaf(26 * s, 9 * s, FX_PAL.vine) : SH.petal(10 * s, '#ff86b4', '#ffd0e2')), 8, 0, 60, 100);
-      const g = st.g(`<ellipse rx="${n1(80 * s)}" ry="${n1(20 * s)}" fill="${st.grad([[0, '#eaffd8', 1], [1, '#4fbf6a', 0]], true)}"/>`);
-      st.key(g, { x: at.x, y: feet, s: [0.3, 1.1, 1], o: [0, 0.9, 0] }, 0, 800, 'ease-out');
-      break;
-    }
-    case 'shield': {
-      const b = st.g(`<circle r="${n1(78 * s)}" fill="#bfe6ff" fill-opacity=".35" ${SW(4 * s)}/><circle r="${n1(78 * s)}" fill="none" stroke="#7cc8ff" stroke-width="${n1(5 * s)}"/><path d="M${n1(-46 * s)} ${n1(-40 * s)}Q${n1(-30 * s)} ${n1(-62 * s)} ${n1(-4 * s)} ${n1(-66 * s)}" fill="none" stroke="#fff" stroke-width="${n1(7 * s)}" stroke-linecap="round"/>`);
-      st.key(b, { x: at.x, y: at.y, s: [0.2, 1.12, 0.96, 1], o: [0, 1, 1, 0], offs: [0, 0.3, 0.75, 1] }, 0, 800, 'ease-out');
-      rise(() => SH.sparkle(10 * s, '#ffffff'), 4, 200, 60, 50);
-      break;
-    }
-    case 'armor': {
-      for (let k = 0; k < 6; k++) { const a = k * 60, p0 = pol(at, a, 140 * s), p1 = pol(at, a, 56 * s); const g = st.g(SH.chip(17 * s, k % 2 ? P.main : '#c9b8a6')); st.key(g, { x: [p0.x, p1.x], y: [p0.y, p1.y], r: [a, a + 90], s: [0.5, 1.1, 1], o: [0, 1, 1, 0] }, k * 35, 650, 'ease-in'); }
-      ring('#a4532a', 1.2, 0.95, 330, 420, 9);
-      break;
-    }
-    case 'empower': case 'rally': {
-      const col = kind === 'rally' ? '#ff7a45' : '#ffb03b';
-      const aura = st.g(`<ellipse rx="${n1(70 * s)}" ry="${n1(95 * s)}" fill="${st.grad([[0, '#fff3c2', 0.9], [0.6, col, 0.55], [1, col, 0]], true)}"/>`);
-      st.key(aura, { x: at.x, y: at.y - 10 * s, s: [0.3, 1.1, 1, 1.15], o: [0, 1, 0.8, 0] }, 0, 800, 'ease-out');
-      for (let k = 0; k < 3; k++) { const g = st.g(SH.chevron(30 * s, col)); st.key(g, { x: at.x, y: [at.y + 40 * s, at.y - 110 * s], s: [0.5, 1.1, 1], o: [0, 1, 1, 0] }, 80 + k * 150, 600, 'ease-out'); }
-      break;
-    }
-    case 'haste': {
-      for (let k = 0; k < 6; k++) { const y = at.y + (k - 2.5) * 18 * s, x0 = at.x + 110 * s, x1 = at.x - 120 * s; const g = st.g(`<path d="M0 0H${n1(70 * s)}" stroke="#a6f0f5" stroke-width="${n1(6 * s)}" stroke-linecap="round"/><path d="M0 0H${n1(70 * s)}" stroke="#fff" stroke-width="${n1(2.5 * s)}" stroke-linecap="round"/>`); st.key(g, { x: [x0, x1], y, o: [0, 1, 0] }, k * 55, 380, 'ease-in'); }
-      ring('#3fb6c6', 0.5, 1.5, 120, 420, 5);
-      break;
-    }
-    case 'slow': {
-      const sw = st.g(`<path d="M0 0m${n1(-50 * s)} 0a${n1(50 * s)} ${n1(50 * s)} 0 1 1 ${n1(100 * s)} 0a${n1(38 * s)} ${n1(38 * s)} 0 1 1 ${n1(-76 * s)} 0a${n1(26 * s)} ${n1(26 * s)} 0 1 1 ${n1(52 * s)} 0" fill="none" stroke="#9b7be0" stroke-width="${n1(7 * s)}" stroke-linecap="round"/>`);
-      st.key(sw, { x: at.x, y: at.y - 20 * s, r: [0, -320], s: [0.4, 1, 0.8], o: [0, 1, 0] }, 0, 900, 'ease-out');
-      for (let k = 0; k < 4; k++) { const g = st.g(SH.dot(7 * s, '#cdb8ff', 2)); const x = at.x + (k - 1.5) * 30 * s; st.key(g, { x, y: [at.y - 60 * s, at.y + 40 * s], o: [0, 1, 0] }, 100 + k * 90, 650, 'ease-in'); }
-      break;
-    }
-    case 'freeze': {
-      const ice = st.g(`<rect x="${n1(-62 * s)}" y="${n1(-80 * s)}" width="${n1(124 * s)}" height="${n1(160 * s)}" rx="${n1(18 * s)}" fill="#d8f4ff" fill-opacity=".55" ${SW(4 * s)}/><path d="M${n1(-40 * s)} ${n1(-60 * s)}L${n1(-14 * s)} ${n1(-60 * s)}" stroke="#fff" stroke-width="${n1(8 * s)}" stroke-linecap="round"/><path d="M${n1(30 * s)} ${n1(40 * s)}L${n1(44 * s)} ${n1(20 * s)}" stroke="#fff" stroke-width="${n1(6 * s)}" stroke-linecap="round"/>`);
-      st.key(ice, { x: at.x, y: at.y, sy: [0, 1.05, 1], sx: [0.9, 1, 1], o: [0, 1, 1, 0], offs: [0, 0.25, 0.8, 1] }, 0, 900, 'ease-out');
-      for (let k = 0; k < 6; k++) { const p = pol(at, k * 60 + 30, 95 * s); const g = st.g(SH.sparkle(13 * s, k % 2 ? '#ffffff' : '#a6e3ff')); st.key(g, { x: p.x, y: p.y, s: [0, 1.2, 0], r: [0, 90], o: 1 }, 150 + k * 50, 420, 'ease-out'); }
-      break;
-    }
-    case 'stun': {
-      for (let k = 0; k < 3; k++) {
-        const node = st.g(SH.star(12 * s, '#f5b83d', '#c98a12', '#fff4c2')); const th = k * 120; const xs = [], ys = [];
-        for (let i = 0; i <= 8; i++) { const a = (th + i * 45) / DEG; xs.push(at.x + Math.cos(a) * 48 * s); ys.push(at.y - 70 * s + Math.sin(a) * 14 * s); }
-        st.key(node, { x: xs, y: ys, r: [0, 360], s: [0, 1, 1, 1, 1, 1, 1, 0.8, 0], o: 1 }, k * 60, 900);
-      }
-      ring('#ffd23f', 0.4, 1.4, 0, 400, 6);
-      break;
-    }
-    case 'weaken': {
-      for (let k = 0; k < 5; k++) { const x = at.x + rnd(-45, 45) * s; const g = st.g(`<path d="M0 ${n1(-12 * s)}C${n1(9 * s)} 0 ${n1(9 * s)} ${n1(10 * s)} 0 ${n1(10 * s)}C${n1(-9 * s)} ${n1(10 * s)} ${n1(-9 * s)} 0 0 ${n1(-12 * s)}Z" fill="#7cc8ff" ${SW(2.5 * s)}/>`); st.key(g, { x, y: [at.y - 80 * s, at.y + 60 * s], s: [0.6, 1, 0.9], o: [0, 1, 1, 0] }, k * 90, 600, 'ease-in'); }
-      const dim = st.g(`<circle r="${n1(80 * s)}" fill="#5a5a7a" opacity=".35"/>`);
-      st.key(dim, { x: at.x, y: at.y, s: [0.5, 1.1], o: [0, 0.8, 0] }, 50, 700, 'ease-out');
-      break;
-    }
-    case 'taunt': {
-      for (let k = 0; k < 3; k++) ring('#ff5d73', 0.4, 2.1, k * 140, 520, 8);
-      const bang = st.g(`<text font-size="${n1(64 * s)}" font-weight="900" text-anchor="middle" fill="#ffd23f" stroke="${OL}" stroke-width="${n1(6 * s)}" paint-order="stroke" style="font-family:${FONT.replace(/"/g, "'")}">!</text>`);
-      st.key(bang, { x: at.x, y: [at.y - 60 * s, at.y - 90 * s], s: [0.3, 1.3, 1], o: [0, 1, 1, 0] }, 0, 750, 'ease-out');
-      break;
-    }
-    default: rise(() => SH.sparkle(11 * s, '#fff'), 6, 0);
-  }
-  return st.finish(null);
-}
-
-/**
- * Super Move set piece: the screen dims, the caster's art sweeps in big with the move's name, then a flash.
- * art = SVG markup of the caster (a pet or the Star Dragon). Returns { done } (about 1.2 s).
- */
-export function playSuper(layer, { art, name, element = 'star', side = 'ally' } = {}) {
-  const P = FX_PAL[element] || FX_PAL.star;
-  const host = document.createElement('div');
-  host.className = 'super-move ' + side;
-  host.innerHTML = `<div class="sm-dim"></div><div class="sm-rays" style="--sm-main:${P.main};--sm-light:${P.light}"></div><div class="sm-art">${art || ''}</div><div class="sm-name"><span>SUPER MOVE</span><b>${name}</b></div>`;
-  layer.appendChild(host);
-  const done = new Promise((res) => setTimeout(() => { host.classList.add('out'); setTimeout(() => { host.remove(); res(); }, 260); }, 1150));
-  return { done };
 }
 
 /** A puff-of-smoke poof with sparkles where a pet faints. Returns { done }. */
@@ -1090,27 +983,4 @@ export function shake(el, strength = 1) {
   try { anim = el.animate(frames, { duration: 300 + 140 * Math.min(strength, 2.5), easing: 'ease-out', composite: 'add' }); }
   catch { anim = el.animate(frames, { duration: 300 + 140 * Math.min(strength, 2.5), easing: 'ease-out' }); }
   return anim.finished.then(() => {}, () => {});
-}
-
-/** The wizard's Star Dragon (Super Move art): a chunky cartoon dragon in the arcane/star palette. */
-export function dragonSVG() {
-  const O = OL;
-  return `<svg viewBox="0 0 220 200" xmlns="http://www.w3.org/2000/svg">
-  <path d="M60 120 C20 80 10 40 40 20 C50 50 70 60 92 70 Z" fill="#8a63e6" stroke="${O}" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M150 112 C200 80 214 36 186 14 C176 46 152 58 130 66 Z" fill="#8a63e6" stroke="${O}" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M40 20 L52 58 M186 14 L170 54" stroke="#cdb8ff" stroke-width="4" stroke-linecap="round"/>
-  <path d="M70 150 C60 180 30 186 14 172 C34 170 44 160 50 146" fill="#7a52d6" stroke="${O}" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M12 172 l-8 -10 l12 2 l-2 -12 l10 10 Z" fill="#f5b83d" stroke="${O}" stroke-width="4" stroke-linejoin="round"/>
-  <ellipse cx="108" cy="128" rx="54" ry="44" fill="#8a63e6" stroke="${O}" stroke-width="5"/>
-  <ellipse cx="108" cy="140" rx="32" ry="26" fill="#ffe68a" stroke="${O}" stroke-width="4"/>
-  <path d="M108 124 l5 10 l11 1 l-8 7 l3 11 l-11 -6 l-11 6 l3 -11 l-8 -7 l11 -1 Z" fill="#f5b83d" stroke="${O}" stroke-width="3" stroke-linejoin="round"/>
-  <path d="M82 166 l-6 22 h16 Z M130 166 l6 22 h-16 Z" fill="#7a52d6" stroke="${O}" stroke-width="4" stroke-linejoin="round"/>
-  <ellipse cx="112" cy="72" rx="40" ry="34" fill="#9a75f0" stroke="${O}" stroke-width="5"/>
-  <path d="M86 46 l-10 -26 l20 18 Z M132 44 l12 -26 l-4 26 Z" fill="#f5b83d" stroke="${O}" stroke-width="4" stroke-linejoin="round"/>
-  <ellipse cx="140" cy="84" rx="24" ry="16" fill="#b394ff" stroke="${O}" stroke-width="4"/>
-  <circle cx="150" cy="82" r="3" fill="${O}"/><circle cx="160" cy="88" r="3" fill="${O}"/>
-  <ellipse cx="108" cy="66" rx="10" ry="12" fill="#fff" stroke="${O}" stroke-width="3"/><circle cx="111" cy="67" r="6" fill="${O}"/><circle cx="113" cy="64" r="2.2" fill="#fff"/>
-  <path d="M96 52 q12 -8 24 0" fill="none" stroke="${O}" stroke-width="4" stroke-linecap="round"/>
-  <path d="M164 92 q14 4 22 -4 q-6 10 -18 12" fill="#ffb03b" stroke="${O}" stroke-width="3" stroke-linejoin="round"/>
-</svg>`;
 }

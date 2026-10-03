@@ -720,30 +720,6 @@ textarea { width: 100%; min-height: 110px; font-size: 13px; -webkit-user-select:
 }
 .pv-skill-stats .tiers { width: 80px; }
 
-/* Super Move set piece (Epic pets' once-per-battle move, the wizard's Star Dragon) */
-.super-move { position: absolute; inset: 0; z-index: 40; pointer-events: none; overflow: hidden; }
-.super-move .sm-dim { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(43,33,64,.35), rgba(20,12,36,.82)); animation: smFade .25s ease-out both; }
-.super-move .sm-rays { position: absolute; left: 50%; top: 45%; width: 160vmax; height: 160vmax; margin: -80vmax 0 0 -80vmax;
-  background: repeating-conic-gradient(from 0deg, var(--sm-main) 0 6deg, transparent 6deg 18deg); opacity: .35; animation: smSpin 1.4s linear both, smFade .3s ease-out both; }
-.super-move .sm-art { position: absolute; top: 12%; width: min(46%, 380px); aspect-ratio: 1; left: 50%; filter: drop-shadow(0 6px 0 rgba(43,33,64,.5)) drop-shadow(0 0 24px rgba(255,255,255,.6)); animation: smSweepIn .5s cubic-bezier(.2,.9,.3,1.2) both; }
-.super-move.enemy .sm-art { animation-name: smSweepInR; }
-.super-move .sm-art svg { width: 100%; height: 100%; }
-.super-move .sm-name { position: absolute; left: 0; right: 0; bottom: 14%; text-align: center; color: #fff; text-shadow: 0 3px 0 #2b2140, 0 0 18px rgba(255,210,63,.8); animation: smPop .45s .25s cubic-bezier(.2,.9,.3,1.4) both; }
-.super-move .sm-name span { display: block; font-weight: 900; letter-spacing: .25em; font-size: clamp(12px, 2.2vw, 18px); color: #ffd23f; }
-.super-move .sm-name b { display: block; font-size: clamp(26px, 5.5vw, 52px); font-weight: 900; }
-.super-move.out { animation: smFade .26s ease-in reverse both; }
-@keyframes smFade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes smSpin { from { transform: rotate(0deg) scale(.6); } to { transform: rotate(40deg) scale(1); } }
-@keyframes smSweepIn { from { transform: translate(-160%, 20%) scale(.6) rotate(-12deg); } to { transform: translate(-50%, 0) scale(1) rotate(0); } }
-@keyframes smSweepInR { from { transform: translate(60%, 20%) scale(.6) rotate(12deg); } to { transform: translate(-50%, 0) scale(1) rotate(0); } }
-@keyframes smPop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .super-move .sm-rays { animation: none; } }
-
-/* Answer streak: 3 right in a row */
-.bf-magic.streak { box-shadow: 0 0 0 3px #ffb03b, 0 0 18px #ffb03b; border-radius: 999px; }
-.streak-badge { margin-left: 8px; font-weight: 900; color: #c25a00; background: #fff1cc; border-radius: 999px; padding: 2px 8px; font-size: .85em; }
-.ab-btn.used { opacity: .5; }
-.ab-btn.signature { box-shadow: inset 0 0 0 3px #ffd23f, 0 0 12px rgba(255,210,63,.6); }
 /* Backups */
 .backup-nudge { display: block; margin: 6px auto 0; max-width: 560px; border: 0; border-radius: 14px; padding: 10px 14px; font-weight: 800; color: #5a3b00; background: #fff1cc; box-shadow: 0 3px 0 #d9a93a; cursor: pointer; }
 .welcome-foot .restore-btn { margin-right: 8px; }

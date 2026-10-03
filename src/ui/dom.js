@@ -76,7 +76,7 @@ export function modal(title, { onClose, wide = true } = {}) {
   return { el: back, body, close };
 }
 
-export const sleep = (ms) => new Promise((r) => setTimeout(r, globalThis.__mwaArena ? 0 : ms));   // arena sims (tools/arena.mjs) skip waits
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -132,9 +132,7 @@ export function evolve(profile, pet) {
   persist();
 }
 
-// v62: a gentler curve (was 40 + 20L + L²): v61 bot wizards reached only level 17–18 while their pets reached 34–36,
-// so the wizard's big spells (Thunderstorm at 16, Star Dragon at 30) came too late or never [TUNABLE].
-export const wizardXpNeeded = (level) => Math.round(25 + 8 * level + 0.2 * level * level);
+export const wizardXpNeeded = (level) => Math.round(40 + 20 * level + level * level);
 
 export function giveWizardXP(profile, amount) {
   const w = profile.wizard;

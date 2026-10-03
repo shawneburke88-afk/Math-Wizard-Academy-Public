@@ -1,10 +1,11 @@
 // App controller: home screen <-> world, and everything that happens in the world (encounters, NPCs, rewards).
-import { load, persist, requestPersistence, currentFamily, flushCloud, closeFamily, families } from './core/save.js';
+import { load, persist, requestPersistence, currentFamily, flushCloud, closeFamily, families, backupDue } from './core/save.js';
 import { prepareWhatsNew } from './ui/whatsnew.js';
+import { checkLastLoad, takeLoadFailure, loadStep, loadDone, liteMode } from './core/loadguard.js';
 import { showWelcome } from './ui/welcome.js';
 import { clearUI, toast, banner, h, mount } from './ui/dom.js';
 import { showHome } from './ui/home.js';
-import { showParent, showParentGate } from './ui/parent.js';
+import { showParent, showParentGate, autoBackup, offerBackup } from './ui/parent.js';
 import { startOverworld, stopOverworld, worldScene, sleepWorld } from './game/overworld.js';
 import { showHud, hideHud, showQuestTracker, talk, celebrate, openTeam, openBag, openQuests, openBook, openMap, openMenu, openShop, openCoins, dialog } from './ui/hud.js';
 import { runBattle, snapshot } from './ui/battle.js';
@@ -71,7 +72,9 @@ async function boot() {
   mountAudioControl();
   playMusic('academy');
   prepareWhatsNew({ hadPlayed: families().length > 0 });
+  const failed = checkLastLoad();
   showWelcome({ onOpen: goHome });
+  if (failed) setTimeout(() => toast('Last time the world didn’t finish opening, so this device now uses lighter graphics.'), 1500);
 }
 let updateReady = false;
 /** Which music plays in an area: the town uses the Academy theme. */
@@ -98,6 +101,9 @@ function goHome() {
     onParent: () => showParentGate({ onPass: openGrownups, onCancel: goHome }),
     onSwitch: () => { closeFamily(); showWelcome({ onOpen: goHome }); },
   });
+  // Backups: when there's new progress, update the remembered backup file by itself if the browser allows it,
+  // otherwise offer a one-tap "Save a backup?" box.
+  if (backupDue()) autoBackup().then((ok) => { if (!ok && backupDue() && document.querySelector('.profiles')) offerBackup({ onDone: () => { if (document.querySelector('.profiles') && !document.querySelector('.modal-back')) goHome(); } }); else if (ok && document.querySelector('.profiles')) goHome(); });
 }
 
 function openGrownups() {
@@ -109,6 +115,9 @@ function enterWorld(profile, info = {}) {
   P = profile;
   setActiveProfile(P);
   setPlayer({ profileId: profile.id, familyId: currentFamily()?.id, grade: profile.grade, share: currentFamily()?.shareData !== false, test: !!profile.test });
+  const failed = takeLoadFailure();
+  if (failed) { track('load_fail', failed); flushPlaydata(); }
+  loadStep('start');
   track('session_start', { wiz: profile.wizard.level, pets: profile.pets.length, team: teamPets(profile).map((p) => [p.species, p.level, p.stage]), coins: profile.coins, items: profile.items.length });
   sessionStart = Date.now();
   enforceCaps(P);
@@ -127,6 +136,7 @@ function enterWorld(profile, info = {}) {
   playTimer = setInterval(() => { if (P && document.visibilityState === 'visible') { P.stats.playMs += 30000; dailyRecord(P).play += 0.5; persist(); } }, 30000);
   startOverworld(P, {
     onReady: async () => {
+      track('world_load', { ms: loadDone(), lite: liteMode(), dpr: window.devicePixelRatio || 1 });
       loading.remove();
       refreshHud();
       if (info.isNew) await introStory();

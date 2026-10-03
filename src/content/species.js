@@ -36,12 +36,10 @@ export function effectLabel(m) {
 // in that region is high enough (challenge spots show them a little earlier).
 export const CLASSES = {
   // mult kept close together so a new rarer pet is a clear but not huge step up [TUNABLE]
-  // v62: every class evolves at the same levels (was up to 26/46 for Epic): rarer pets joined with fewer moves than the
-  // Commons they would replace and never reached stage 3 in a region (Spell Evaluation v61).
   1: { name: 'Common', mult: 1.0, evolve: [14, 28], unlock: 1.0 },
-  2: { name: 'Uncommon', mult: 1.1, evolve: [14, 28], unlock: 1.8 },
-  3: { name: 'Rare', mult: 1.2, evolve: [14, 28], unlock: 2.6 },
-  4: { name: 'Epic', mult: 1.32, evolve: [14, 28], unlock: 3.4 },
+  2: { name: 'Uncommon', mult: 1.1, evolve: [18, 34], unlock: 1.8 },
+  3: { name: 'Rare', mult: 1.2, evolve: [22, 40], unlock: 2.6 },
+  4: { name: 'Epic', mult: 1.32, evolve: [26, 46], unlock: 3.4 },
 };
 // Befriend zone [TUNABLE]: a wild pet can be befriended once its health is at or below this share.
 // Common pets trust you sooner; rarer, stronger pets must be worn down much further. Rare (sparkly) variants need 30% less.

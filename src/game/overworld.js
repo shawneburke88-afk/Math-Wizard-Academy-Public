@@ -11,10 +11,18 @@ import { gateOpen, guardianAwake, keeperAwake, speciesUnlocked, teamPets, wildSt
 import { persist } from '../core/save.js';
 import { SPECIES } from '../content/species.js';
 import { sceneryTextureJobs, dressWorld, updateScenery } from './scenery.js';
+import { liteMode, loadStep } from '../core/loadguard.js';
 const SPECIES_IDS = Object.keys(SPECIES);
 
-const RES = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1)));
-const TEX = TILE * RES;
+// Lighter graphics (normal sharpness instead of double, pictures drawn in smaller batches) on iPads inside the Claude
+// app / claude.ai, and on any device where the world once failed to open (see core/loadguard.js).
+// Worked out each time the world opens (a failed load switches the device to light mode at the next start).
+let LITE = false, RES = 1, TEX = TILE;
+function pickResolution() {
+  LITE = liteMode();
+  RES = LITE ? 1 : Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1)));
+  TEX = TILE * RES;
+}
 const THEMES = ['academy', 'number', 'patterns', 'shape', 'stats'];
 const REVEAL = 5;          // fog reveal radius in tiles
 // Roaming pets per subzone when it's full (deeper subzones are bigger) [TUNABLE]. v48: was 5/7/9/11, well short of each
@@ -35,6 +43,7 @@ let game = null;
 
 export function startOverworld(profile, hooks) {
   stopOverworld();
+  pickResolution();
   const iw = window.innerWidth, ih = window.innerHeight;
   game = new Phaser.Game({
     type: Phaser.AUTO,
@@ -81,21 +90,35 @@ function sizedSvg(svg, w, h) {
     return `<svg${a} width="${w}" height="${h}">`;
   });
 }
-function loadSvgImage(svg, w, h) {
-  return new Promise((resolve) => {
+// The world draws ~1,000 SVG pictures into canvases when it opens. They're drawn a few at a time with short breaks,
+// so the page keeps responding and memory doesn't spike (all at once, iPads inside claude.ai reloaded the page).
+let svgBusy = 0, svgDone = 0;
+const svgWaiting = [];
+async function drawSvg(svg, w, h, ctx, x = 0, y = 0) {
+  if (svgBusy >= (LITE ? 3 : 8)) await new Promise((r) => svgWaiting.push(r));
+  svgBusy++;
+  try {
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => { console.warn('SVG failed to load'); resolve(null); };
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(sizedSvg(svg, w, h));
-  });
+    await new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = () => { console.warn('SVG failed to load'); resolve(); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(sizedSvg(svg, w, h));
+    });
+    if (img.naturalWidth) ctx.drawImage(img, x, y, w, h);
+    img.onload = img.onerror = null;
+    img.removeAttribute('src');
+    if (LITE && ++svgDone % 24 === 0) await new Promise((r) => setTimeout(r, 30));   // a breather for the browser
+  } finally {
+    svgBusy--;
+    svgWaiting.shift()?.();
+  }
 }
 async function addSvgTexture(scene, key, svg, w, h) {
   if (scene.textures.exists(key)) return;
-  const img = await loadSvgImage(svg, w, h);
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
-  if (img) c.getContext('2d').drawImage(img, 0, 0, w, h);
-  scene.textures.addCanvas(key, c);
+  await drawSvg(svg, w, h, c.getContext('2d'));
+  if (!scene.textures.exists(key)) scene.textures.addCanvas(key, c);
 }
 
 // ---------- fog persistence (1 bit per tile) ----------
@@ -131,6 +154,7 @@ class WorldScene extends Phaser.Scene {
     this.world = buildWorld();
     this.hooks.onLoading?.('Drawing the world…');
     await this.buildTextures();
+    loadStep('building');
     this.drawGround();
     this.drawProps();
     dressWorld(this, RES);
@@ -150,6 +174,7 @@ class WorldScene extends Phaser.Scene {
 
   // ---------- textures ----------
   async buildTextures() {
+    loadStep('ground');
     // Ground atlas: every distinct (tile name, theme) pair in the map, including autotiled edges and corners.
     this.tileNames = autotile(this.world);
     const combos = new Map();
@@ -164,10 +189,11 @@ class WorldScene extends Phaser.Scene {
     const ctx = atlas.getContext('2d');
     await Promise.all([...combos.entries()].map(([k, i]) => {
       const [name, th] = k.split('|');
-      return loadSvgImage(safe(() => tileSVG(name, th)), TEX, TEX).then((img) => { if (img) ctx.drawImage(img, (i % cols) * TEX, Math.floor(i / cols) * TEX, TEX, TEX); });
+      return drawSvg(safe(() => tileSVG(name, th)), TEX, TEX, ctx, (i % cols) * TEX, Math.floor(i / cols) * TEX);
     }));
     this.textures.addCanvas('ground', atlas);
 
+    loadStep('pictures');
     // Props used by this world.
     const needed = new Map();
     for (const p of this.world.props) needed.set(`prop:${p.prop}:${p.theme}:${p.variant || 0}`, p);

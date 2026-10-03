@@ -1,7 +1,7 @@
 // Grown-ups area: progress reports, settings per kid, and backup codes. Behind a simple adult check.
 import { progressView } from './progressview.js';
-import { h, clearUI, mount, toast, ask, notice } from './dom.js';
-import { profiles, persist, deleteProfile, exportBackup, importBackup, currentFamily, renameFamily, setPin, deleteFamily, closeFamily, backupFileText, markBackedUp, backupDue } from '../core/save.js';
+import { h, clearUI, mount, toast, ask, notice, modal } from './dom.js';
+import { profiles, persist, deleteProfile, exportBackup, importBackup, currentFamily, renameFamily, setPin, deleteFamily, closeFamily, backupFileText, markBackedUp, backupDue, progressMark } from '../core/save.js';
 import { cloudStatus } from '../core/cloud.js';
 import { exportPlaydata, playdataCount, flush as flushPlaydata } from '../core/telemetry.js';
 import { pinPad } from './welcome.js';
@@ -182,6 +182,36 @@ export async function saveBackupFile({ choose = false } = {}) {
   document.body.appendChild(a); a.click(); a.remove();
   markBackedUp(name); toast('Backup file saved to Downloads!');
   return true;
+}
+
+/** Save to the remembered backup file without asking, when the browser still allows it (no tap needed). */
+export async function autoBackup() {
+  if (!canRemember()) return false;
+  try {
+    const fam = currentFamily();
+    const hd = await getHandle(fam?.id);
+    if (!hd || (await hd.queryPermission?.({ mode: 'readwrite' })) !== 'granted') return false;
+    const w = await hd.createWritable(); await w.write(backupFileText()); await w.close();
+    markBackedUp(hd.name); toast(`💾 Backup updated (${hd.name})`);
+    return true;
+  } catch (e) { return false; }
+}
+
+/** "Save a backup?" box with one big button (the tap lets the browser open its save window). */
+let skippedAt = null;   // progress when "Not now" was tapped: don't ask again until there is more play
+export function offerBackup({ onDone } = {}) {
+  if (skippedAt != null && skippedAt === progressMark()) return;
+  const fam = currentFamily();
+  const m = modal('💾 Save a backup?', { wide: false, onClose: () => { skippedAt = progressMark(); onDone?.(); } });
+  const first = !fam?.lastBackup;
+  m.body.append(
+    h('p', { style: { fontSize: '18px', fontWeight: 700, marginTop: 0 } }, 'There’s new progress since the last backup. Saving a backup keeps it safe if this browser’s data is ever cleared.'),
+    h('p.muted', canRemember()
+      ? (first ? 'The first time, choose where to keep the file (for example Documents). After that, the game updates that same file by itself.' : 'Tap Save to update your backup file.')
+      : 'On an iPad: tap Save, then “Save to Files”, pick iCloud Drive and the same folder as last time, and tap Replace.'),
+    h('div.row', { style: { justifyContent: 'flex-end', gap: '10px' } },
+      h('button.btn.secondary', { onclick: () => m.close() }, 'Not now'),
+      h('button.btn.green.glow', { onclick: async () => { if (await saveBackupFile()) { skippedAt = null; m.close(); } } }, '💾 Save backup now')));
 }
 
 /** Ask for a backup file and return its text (or null if none was picked). */

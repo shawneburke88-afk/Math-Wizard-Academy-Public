@@ -7,7 +7,7 @@ import { checkStruggle } from './lesson.js';
 import { track } from '../core/telemetry.js';
 import { creatureSVG, guardianSVG } from '../art/creatures.js';
 import { wizardSVG, npcSVG } from '../art/wizard.js';
-import { playSpell, playFaint, playCatch, playBuff, playSuper, dragonSVG, shake } from '../art/fx.js';
+import { playSpell, playFaint, playCatch, shake } from '../art/fx.js';
 import { DOT_STYLE } from '../content/abilities.js';
 import { SPECIES, elementMultiplier, effectLabel, petStats, speciesName, stageForLevel, ELEMENTS, CLASSES, befriendThreshold } from '../content/species.js';
 import { makeQuestion, skillsForSpecies, skillsForStrand, skillsFor } from '../content/curriculum.js';
@@ -25,8 +25,6 @@ let battlefieldSVG = null;
 import('../art/battlefield.js').then((m) => { battlefieldSVG = m.battlefieldSVG; }).catch(() => {});
 
 const REGION_ELEMENT = { number: 'star', patterns: 'vine', shape: 'stone', stats: 'storm' };
-// Arena simulations (tools/arena.mjs, testing only): no animations or waits, and the team plays by a set policy.
-const ARENA = () => (typeof window !== 'undefined' ? window.__mwaArena : null);
 const STAMINA_RATE = 4.2;           // stamina per second per point of speed (speed 10 fills in ~2.4 s)
 
 // Feet positions in battlefield-art coordinates (viewBox 1600×900, drawn with "xMidYMax slice").
@@ -44,11 +42,10 @@ class Battle {
     this.o = opts;
     this.p = opts.profile;
     this.resolve = resolve;
-    this.rand = mulberry32(ARENA()?.seed ?? newSeed());   // arena sims replay the same luck for a fair comparison
+    this.rand = mulberry32(newSeed());
     this.gentle = this.p.grade <= 2;
     this.magic = Math.min(MAX_MAGIC, 1 + Math.floor(equippedBonus(this.p).focus || 0));
-    this.log = { t0: Date.now(), turns: 0, playerTurns: 0, questions: 0, correct: 0, second: 0, orbCap: 0 };
-    this.casts = []; this.cur = null; this.castMeta = null;   // per-cast value log (play data for balancing)
+    this.log = { t0: Date.now(), turns: 0, playerTurns: 0, questions: 0, correct: 0, second: 0 };
     this.hints = 0; this.xpTotal = 0; this.levelEvents = []; this.tierUps = []; this.caughtList = [];
     this.paused = true; this.over = false;
     this.before = snapshot(this.p);
@@ -75,9 +72,6 @@ class Battle {
         speed: st.speed, abilities: battleSet(petAbilitiesFor(sp, pet.stage, pet.level)),
       }));
     }
-    // Sparkly (rare variant) pets bring 1 extra magic orb each into battle [TUNABLE].
-    const sparkly = this.units.filter((x) => x.side === 'ally' && x.pet?.rare).length;
-    if (sparkly) this.magic = Math.min(MAX_MAGIC, this.magic + sparkly);
     // Enemies absorb part of the team's extra strength (evolutions, rare pets, merges, gear) so battles stay a challenge.
     const es = enemyScale(this.p, this.o.area);
     this.enemyScale = es;
@@ -121,7 +115,7 @@ class Battle {
       if (this.units.some((u) => u.leader)) await tip(P, 'leader');
       if (this.units.some((u) => u.kind === 'champion')) await tip(P, 'champion');
       this.paused = false; this.last = performance.now(); this.loop();
-    }, ARENA() ? 0 : 1200);
+    }, 1200);
   }
 
   allies() { return this.units.filter((u) => u.side === 'ally' && u.alive); }
@@ -306,9 +300,7 @@ class Battle {
   }
 
   drawMagic() {
-    this.magicEl.classList.toggle('streak', !!this.streakReady);
-    this.magicEl.replaceChildren(h('span', 'Magic '), ...Array.from({ length: MAX_MAGIC }, (_, i) => h('span.orb' + (i < this.magic ? '.on' : ''))),
-      this.streakReady ? h('span.streak-badge', '🔥 Extra hit ready') : null);
+    this.magicEl.replaceChildren(h('span', 'Magic '), ...Array.from({ length: MAX_MAGIC }, (_, i) => h('span.orb' + (i < this.magic ? '.on' : ''))));
   }
 
   say(text, read = false) {
@@ -320,10 +312,9 @@ class Battle {
   loop() {
     if (this.over) return;
     const now = performance.now();
-    const dt = ARENA() ? 0.05 : Math.min(0.05, (now - (this.last || now)) / 1000);
+    const dt = Math.min(0.05, (now - (this.last || now)) / 1000);
     this.last = now;
-    // Arena sims run the clock forward until someone is ready (same 0.05 s steps, so turn order is unchanged).
-    for (let step = 0; !this.paused && step < (ARENA() ? 400 : 1); step++) {
+    if (!this.paused) {
       for (const u of this.units) {
         if (!u.alive) continue;
         const rate = u.speed * STAMINA_RATE * (u.status.haste ? 1.5 : 1) * (u.status.slow ? 0.6 : 1);
@@ -334,7 +325,6 @@ class Battle {
       const ready = this.units.filter((u) => u.alive && u.stamina >= 100).sort((a, b) => (a.side === 'ally' ? 0 : 1) - (b.side === 'ally' ? 0 : 1));
       if (ready.length) { this.paused = true; this.turn(ready[0]); }
     }
-    if (ARENA()) { this.raf = setTimeout(() => this.loop(), 0); return; }
     this.raf = requestAnimationFrame(() => this.loop());
   }
 
@@ -343,34 +333,28 @@ class Battle {
     this.log.turns++; if (u.side === 'ally') this.log.playerTurns++;
     u.stamina = 0;
     u.el.classList.add('acting');
-    // Weaken and Rally change this unit's own attacks, so they count down AFTER it acts (v62 fix: counted down first,
-    // they covered one attack fewer than their turns said). Speed and armor statuses count down here.
-    for (const k of ['haste', 'slow', 'armor']) if (u.status[k]) u.status[k]--;
+    for (const k of ['haste', 'slow', 'armor', 'weaken', 'rally']) if (u.status[k]) u.status[k]--;
     if (u.status.taunt && !--u.status.taunt) this.endTaunt(u);
     if (await this.tickOverTime(u)) { u.el.classList.remove('acting'); if (this.checkEnd()) return; this.last = performance.now(); this.paused = false; return; }
     if (u.status.freeze || u.status.stun) {
       // A full stamina bar is spent shaking off freeze/stun instead of acting.
       const k = u.status.freeze ? 'freeze' : 'stun';
       u.status[k]--;
-      this.credit(u.src?.[k], 'skipped', 1);
       this.float(u, k === 'freeze' ? '❄️ Frozen!' : '💫 Stunned!', 'eff');
       this.say(`${u.name} is ${k === 'freeze' ? 'frozen' : 'stunned'} and can't move!`);
       this.updateUnit(u);
       await sleep(900);
     } else if (u.side === 'ally') {
-      await (ARENA() ? this.arenaTurn(u, ARENA()) : this.playerTurn(u));
+      await this.playerTurn(u);
     } else {
       await this.enemyTurn(u);
     }
-    for (const k of ['weaken', 'rally']) if (u.status[k]) u.status[k]--;
-    if (u.status.rally === 0) u.status.rallyBy = null;
     u.el.classList.remove('acting');
     this.updateUnit(u);
     if (this.checkEnd()) return;
     if (this.pendingStatusTip) { this.pendingStatusTip = false; await tip(this.p, 'status'); }
     if (this.pendingBefriendTip) { this.pendingBefriendTip = false; await tip(this.p, 'befriend'); }
     if (this.pendingOvertimeTip) { this.pendingOvertimeTip = false; await tip(this.p, 'overtime'); }
-    if (this.pendingStreakTip) { this.pendingStreakTip = false; await tip(this.p, 'streak'); }
     this.actions.replaceChildren();
     this.say('');
     this.last = performance.now();
@@ -382,7 +366,6 @@ class Battle {
     const s = u.status;
     if (s.regen) {
       const amt = Math.round(u.maxHp * s.regen.amount);
-      this.credit(s.regen.src, 'heal', Math.min(amt, u.maxHp - u.hp)); this.credit(s.regen.src, 'overheal', Math.max(0, amt - (u.maxHp - u.hp)));
       u.hp = Math.min(u.maxHp, u.hp + amt); if (u.pet) u.pet.hp = u.hp;
       this.float(u, `🌱 +${amt}`, 'heal');
       if (!--s.regen.turns) s.regen = null;
@@ -390,7 +373,6 @@ class Battle {
     }
     if (s.dot) {
       const d = s.dot;
-      this.credit(d.src, 'dmg', Math.min(u.hp, d.dmg)); this.credit(d.src, 'over', Math.max(0, d.dmg - u.hp)); if (u.hp > 0 && d.dmg >= u.hp) this.credit(d.src, 'kills', 1);
       u.hp = Math.max(0, u.hp - d.dmg); if (u.pet) u.pet.hp = u.hp;
       this.float(u, `${d.icon} −${d.dmg}`);
       this.hurtFlash(u);
@@ -427,7 +409,6 @@ class Battle {
       this.showAbilities(u);
       await tip(this.p, 'abilities');
       if (u.abilities.some((a) => a.cost > 0) && this.magic >= 2) await tip(this.p, 'magic');
-      if (u.abilities.some((a) => a.signature === 'super')) await tip(this.p, 'superMove');
       if (this.canBefriendHere() && this.enemies().some((e) => this.befriendable(e))) await tip(this.p, 'befriend');
     });
   }
@@ -439,9 +420,8 @@ class Battle {
       const eligible = a.kind !== 'befriend' || this.enemies().some((e) => this.befriendable(e));
       const cls = a.cost >= 4 ? '.green' : a.cost >= 2 ? '.purple' : a.cost >= 1 ? '' : '.secondary';
       const short = Math.max(0, a.cost - this.magic);
-      const used = a.once && u.usedOnce?.[a.id];
-      return h('button.btn.ab-btn' + cls + (used ? '.used' : '') + (a.signature || a.super ? '.signature' : ''), { disabled: short > 0 || !eligible || used, onclick: () => this.pickAbility(u, a) },
-        h('span.ab-name', `${a.icon} ${a.name}${used ? ' (used)' : ''}`),
+      return h('button.btn.ab-btn' + cls, { disabled: short > 0 || !eligible, onclick: () => this.pickAbility(u, a) },
+        h('span.ab-name', `${a.icon} ${a.name}`),
         h('span.cost', a.cost ? h('span.cost-orbs', ...Array.from({ length: a.cost }, (_, i) => h('i' + (i < this.magic ? '.have' : '')))) : h('span.free', 'Free')),
         h('span.ab-eff', this.effectText(u, a)),
         h('span.ab-desc', a.desc || ''));
@@ -455,14 +435,6 @@ class Battle {
   /** What a move does, in numbers: damage range (before the target's defence and elements), heal, shield, etc. */
   effectText(u, a) {
     const pct = (x) => `${Math.round(x * 100)}%`;
-    const extra = [a.strike ? '💥 zaps an enemy' : '', a.teamHeal ? `💚 team +${pct(a.teamHeal)}` : '', a.selfHeal ? `💚 self +${pct(a.selfHeal)}` : '',
-      a.teamShield ? `🛡️ team ${pct(a.teamShield)}` : '', a.shieldToo ? `🛡️ ${pct(a.shieldToo)}` : '', a.shieldSelf && a.kind !== 'buff' ? `🛡️ self ${pct(a.shieldSelf)}` : '',
-      a.selfStatus?.armor ? '🪨 tougher' : '', a.selfStatus?.empower ? '💪 next hit ×2' : '', a.teamStatus?.armor ? '🪨 team tougher' : '',
-      a.teamStamina ? '⏩ team faster' : '', a.status?.weaken && a.kind === 'attack' ? '💧 weaker' : '', a.once ? 'once per battle' : ''].filter(Boolean);
-    const base = this.effectBase(u, a, pct);
-    return [base, ...extra].filter(Boolean).join(' · ');
-  }
-  effectBase(u, a, pct) {
     if (a.kind === 'attack') {
       const base = u.power * (a.mult || 1) * (u.status.empower ? 2 : 1);
       const r = `${Math.max(1, Math.round(base * 0.9))}–${Math.max(1, Math.round(base * 1.1))}`;
@@ -558,7 +530,6 @@ class Battle {
   }
 
   async perform(u, a, target) {
-    this.castMeta = { opts: u.abilities.filter((x) => x.kind !== 'befriend' && x.cost <= this.magic).length, orbs: this.magic };
     this.magic -= a.cost; this.drawMagic();
     this.say(a.kind === 'befriend' ? `Answer to befriend ${target.name}!` : `Answer to cast ${a.name}!`);
     // A wrong answer reveals the hint and allows one more try at the same question; a right second try casts
@@ -567,29 +538,16 @@ class Battle {
     const power = res.correct && res.secondTry ? SECOND_TRY : 1;
     this.log.questions++; if (res.correct) this.log.correct++; if (res.secondTry) this.log.second++;
     if (res.correct) {
-      if (power === 1) { if (this.magic >= MAX_MAGIC) this.log.orbCap++; this.magic = Math.min(MAX_MAGIC, this.magic + 1); this.drawMagic(); }
+      if (power === 1) { this.magic = Math.min(MAX_MAGIC, this.magic + 1); this.drawMagic(); }
       const foeLevel = Math.max(1, ...this.units.filter((x) => x.side === 'enemy').map((x) => x.level));
       const xp = Math.round((3 + Math.round(foeLevel * 0.6)) * power);
       this.xpTotal += xp;
       if (u.kind === 'pet') this.levelEvents.push(...giveXP(this.p, u.pet, xp));
       giveWizardXP(this.p, u.kind === 'wizard' ? 3 : 1);
-      // Answer streak [TUNABLE]: 3 first-try right answers in a row → the next move hits one extra time. No timer, and a
-      // wrong answer only resets the count (an earned bonus waits for the next right answer).
-      const bonus = this.streakReady && a.kind !== 'befriend';
-      if (bonus) this.streakReady = false;
-      if (power === 1) {
-        this.streak = (this.streak || 0) + 1;
-        if (this.streak >= 3) { this.streak = 0; this.streakReady = true; this.float(u, '🔥 3 in a row!', 'heal'); this.pendingStreakTip = true; }
-      } else this.streak = 0;
-      this.drawMagic();
       if (a.kind === 'befriend') await this.befriend(u, target);
       else {
         if (power < 1) { this.float(u, '½ power', 'eff'); this.say(`${a.name} at half strength!`); }
-        if (this.castMeta) this.castMeta.half = power < 1;
-        if (a.once) (u.usedOnce ||= {})[a.id] = true;
-        let cast = power < 1 ? scaleAbility(a, power) : a;
-        if (bonus) cast = { ...cast, bonusHit: true };
-        await this.execute(u, cast, target);
+        await this.execute(u, power < 1 ? scaleAbility(a, power) : a, target);
       }
     } else {
       this.magic = Math.min(MAX_MAGIC, this.magic + a.cost); this.drawMagic();
@@ -598,7 +556,6 @@ class Battle {
         this.float(target, 'Not sure yet…', 'eff');
         this.updateUnit(target);
       }
-      this.streak = 0;
       this.say(a.kind === 'befriend' ? `${target?.name} isn’t sure yet. Try again!` : this.gentle ? 'Nice try! Let’s keep going.' : `${a.name} missed!`);
       sfx.wrong();
       await sleep(800);
@@ -675,7 +632,7 @@ class Battle {
     let a;
     const friends = this.enemies();
     const forced = this.taunters(u);
-    const act = async (ab, t) => { this.say(`${u.name} uses ${ab.name}!`); await sleep(350); if (ab.once) u.abilities = u.abilities.filter((x) => x.id !== ab.id); return this.execute(u, ab, t); };
+    const act = async (ab, t) => { this.say(`${u.name} uses ${ab.name}!`); await sleep(350); return this.execute(u, ab, t); };
     const cap = u.champ === 'trainer' ? ENEMY_HEALS.trainer : u.champ === 'guardian' ? ENEMY_HEALS[u.mini ? 'mini' : 'guardian'] : ENEMY_HEALS.wild;
     const clever = this.smart();
     if (u.champ === 'guardian') {
@@ -737,57 +694,7 @@ class Battle {
     return { x: r.left - f.left + r.width / 2, y: r.top - f.top + r.height * 0.55 };
   }
 
-  /** Arena turn (testing only): the tester pet uses cfg.move whenever the team can afford it, everyone else uses
-   *  their basic attack. A wrong answer (1 − cfg.acc of the time) wastes the turn, as a kid's would. */
-  async arenaTurn(u, cfg) {
-    const basic = u.abilities.find((x) => x.kind === 'attack' && !x.cost) || u.abilities[0];
-    const tester = u.species === cfg.tester;
-    let a = tester && cfg.move && this.magic >= cfg.move.cost && this.arenaUseful(u, cfg.move) ? cfg.move : basic;
-    if (tester && a === basic && cfg.mult) a = { ...basic, mult: (basic.mult || 1) * cfg.mult };
-    if (a.once) (u.usedOnce ||= {})[a.id] = true;
-    if (this.rand() >= (cfg.acc ?? 0.85)) return;
-    this.magic = Math.min(MAX_MAGIC, this.magic - (a.cost || 0) + 1);
-    const foes = this.foesOf(u), friends = this.friendsOf(u);
-    const target = a.target === 'ally' ? [...friends].sort((x, y) => x.hp / x.maxHp - y.hp / y.maxHp)[0]
-      : a.target === 'self' || a.target === 'allAllies' ? u : this.bestTarget(u, a, this.taunters(u).length ? this.taunters(u) : foes);
-    await this.execute(u, a, target);
-  }
-
-  /** Would a sensible player cast this now? (Not when it would do nothing: re-buffing, healing a full team, …) */
-  arenaUseful(u, a) {
-    if (a.once && u.usedOnce?.[a.id]) return false;
-    const friends = this.friendsOf(u), foes = this.foesOf(u);
-    const hurt = friends.some((f) => f.hp / f.maxHp < 0.7);
-    if (a.kind === 'heal' || a.kind === 'regen') return a.target === 'self' ? u.hp / u.maxHp < 0.6 : hurt;
-    if (a.kind === 'shield') return a.target === 'allAllies' ? friends.filter((f) => !(f.status.shield > 0)).length >= 2 : friends.some((f) => !(f.status.shield > 0) && f.hp / f.maxHp < 0.8);
-    if (a.kind === 'buff') return a.status?.empower ? !(a.target === 'self' ? u : friends.find((f) => f !== u))?.status.empower : !Object.keys(a.status || {}).every((k) => (a.target === 'allAllies' ? friends : [u]).every((f) => f.status[k]));
-    if (a.kind === 'taunt') return !u.status.taunt;
-    if (a.kind === 'stamina') return a.stamina > 0 ? true : foes.length > 0;
-    if (a.kind === 'debuff') return foes.some((f) => !Object.keys(a.status || {}).some((k) => f.status[k]));
-    return true;
-  }
-
-  // ---------- per-cast value log ----------
-  // Every cast gets a record of what it actually did, including value that lands later (damage over time, shields
-  // that absorb a hit, turns an enemy loses to freeze/stun, the extra damage from Empower/Rally, damage prevented by
-  // Weaken/Armor). Sent as 'cast' play-data events when the battle ends (tools/analyze-casts.mjs reads them).
-  beginCast(u, a) {
-    const c = { ab: a.id, name: a.name, kind: a.kind, cost: a.cost || 0, tgt: a.target, side: u.side, who: u.kind, sp: u.species || u.champ || u.kind,
-      cls: u.species ? SPECIES[u.species]?.cls : null, st: u.stage || null, rare: !!(u.pet?.rare || u.rare), lv: u.level, foes: this.foesOf(u).length, friends: this.friendsOf(u).length,
-      ...(u.side === 'ally' ? this.castMeta : {}), t0: performance.now(), v: {} };
-    this.castMeta = null;
-    this.casts.push(c); this.cur = c;
-    return c;
-  }
-  credit(c, key, n) { if (c && n) c.v[key] = (c.v[key] || 0) + n; }
-  markSrc(t, key) { if (this.cur) (t.src ||= {})[key] = this.cur; }
-
   async execute(u, a, target) {
-    const c = this.beginCast(u, a);
-    try { await this.executeInner(u, a, target); } finally { c.ms = Math.round(performance.now() - c.t0); this.cur = null; }
-  }
-
-  async executeInner(u, a, target) {
     const targets = this.targetsFor(u, a, target);
     if (!targets.length) return;
     if (a.kind === 'attack') {
@@ -795,22 +702,17 @@ class Battle {
       const main = targets[Math.floor(targets.length / 2)];
       const crit = this.rand() < 0.06 + (a.critBonus || 0) + (u.side === 'ally' ? (equippedBonus(this.p).luck || 0) * 0.004 : 0);
       const effMult = elementMultiplier(element, main.element, main.species);
-      if (!ARENA() && (a.signature === 'super' || a.super)) await this.superIntro(u, a, element);
       u.sprite.classList.remove('idle');
       u.sprite.classList.add(u.side === 'ally' ? 'lunge-right' : 'lunge-left');
-      const many = a.target === 'allEnemies' || a.target === 'randomEnemies';
-      const fx = ARENA() ? { impact: Promise.resolve(), done: Promise.resolve() } : playSpell(this.field, {
+      const fx = playSpell(this.field, {
         from: this.center(u), to: this.center(main), element, family: u.family || undefined, power: a.fx?.power || 'basic',
         stage: u.kind === 'pet' ? u.stage : u.kind === 'champion' ? 3 : Math.min(3, 1 + Math.floor(this.p.wizard.level / 6)),
-        crit, effect: effMult > 1 ? 'super' : effMult < 1 ? 'weak' : 'normal', scale: (u.champ === 'guardian' ? 1.35 : 1) * (a.signature || a.super ? 1.2 : 1),
-        also: many ? targets.filter((t) => t !== main).map((t) => this.center(t)) : [], sparkle: !!(u.rare || u.pet?.rare),
+        crit, effect: effMult > 1 ? 'super' : effMult < 1 ? 'weak' : 'normal', scale: u.champ === 'guardian' ? 1.35 : 1,
       });
       sfx.spell(element, a.fx?.power || 'basic', (fx.impactAt || 600) / 1000);
       await fx.impact;
       sfx.impact(element, a.fx?.power || 'basic', { crit });
       this.hitSoundPower = a.fx?.power || 'basic';
-      // Hit-stop: big hits freeze the picture for a split second on impact, so they land with weight.
-      if (!ARENA() && (crit || a.fx?.power === 'ultimate' || a.signature || a.super)) await this.hitStop(a.fx?.power === 'ultimate' || a.super ? 90 : 60);
       if (fx.shake) shake(this.field, fx.shake);
       let dealt = 0;
       if (a.target === 'randomEnemies') {
@@ -831,19 +733,19 @@ class Battle {
           // Lingering damage: a share of the caster's power on each of the target's next turns.
           const [name, icon] = DOT_STYLE[element] || DOT_STYLE.arcane;
           const dmg = Math.max(1, Math.round(u.power * a.dot.mult * elementMultiplier(element, t.element, t.species)));
-          t.status.dot = { turns: a.dot.turns, dmg, icon, name, src: this.cur };
+          t.status.dot = { turns: a.dot.turns, dmg, icon, name };
           this.float(t, `${icon} ${name}!`, 'eff');
           this.pendingOvertimeTip = true;
         }
         if (a.status && t.alive && this.rand() < (a.statusChance ?? 1) && !(t.champ === 'guardian' && this.rand() < 0.5)) this.applyStatus(t, a.status);
-        if (a.stamina && t.alive) { this.credit(this.cur, 'stam', Math.min(t.stamina, -a.stamina)); t.stamina = Math.max(0, t.stamina + a.stamina); }
+        if (a.stamina && t.alive) t.stamina = Math.max(0, t.stamina + a.stamina);
         this.updateUnit(t);
       }
-      if (a.drain && dealt > 0) { const back = Math.round(dealt * a.drain); this.credit(this.cur, 'heal', Math.min(back, u.maxHp - u.hp)); this.credit(this.cur, 'overheal', Math.max(0, back - (u.maxHp - u.hp))); u.hp = Math.min(u.maxHp, u.hp + back); if (u.pet) u.pet.hp = u.hp; this.float(u, `+${back}`, 'heal'); this.updateUnit(u); }
-      if (a.selfStamina) { this.credit(this.cur, 'stam', a.selfStamina * (u.side === 'enemy' ? ENEMY_SELF_STAMINA : 1)); u.stamina = Math.min(95, u.stamina + a.selfStamina * (u.side === 'enemy' ? ENEMY_SELF_STAMINA : 1)); }
+      if (a.drain && dealt > 0) { const back = Math.round(dealt * a.drain); u.hp = Math.min(u.maxHp, u.hp + back); if (u.pet) u.pet.hp = u.hp; this.float(u, `+${back}`, 'heal'); this.updateUnit(u); }
+      if (a.selfStamina) u.stamina = Math.min(95, u.stamina + a.selfStamina * (u.side === 'enemy' ? ENEMY_SELF_STAMINA : 1));
       if (a.selfHeal) this.heal(u, a.selfHeal);
       if (a.teamHeal) this.friendsOf(u).forEach((f) => this.heal(f, a.teamHeal));
-      if (a.teamShield) this.friendsOf(u).forEach((f) => { f.status.shield = (f.status.shield || 0) + Math.round(f.maxHp * a.teamShield); this.credit(this.cur, 'shield', Math.round(f.maxHp * a.teamShield)); this.markSrc(f, 'shield'); this.updateUnit(f); });
+      if (a.teamShield) this.friendsOf(u).forEach((f) => { f.status.shield = (f.status.shield || 0) + Math.round(f.maxHp * a.teamShield); this.updateUnit(f); });
       if (u.status.empower) { u.status.empower = 0; this.updateUnit(u); }
       this.hitSoundPower = null;
       await fx.done;
@@ -851,26 +753,22 @@ class Battle {
       await this.handleFaints();
     } else if (a.kind === 'heal') {
       sfx.heal();
-      this.fxOn(targets, a.cleanse ? 'cleanse' : 'heal', a.fx?.element || u.element);
       for (const t of targets) {
         this.heal(t, a.amount);
-        if (a.shieldToo) this.addShield(t, a.shieldToo);
         if (a.cleanse) { for (const k of ['freeze', 'stun', 'slow', 'weaken']) t.status[k] = 0; this.updateUnit(t); }
       }
       await sleep(700);
     } else if (a.kind === 'taunt') {
       // Challenge Roar: enemies must attack this unit; teammates hit harder until it gets hit.
       sfx.buff();
-      u.status.taunt = a.turns || 3; this.markSrc(u, 'taunt');
-      this.fxOn([u], 'taunt', u.element); this.fxOn(this.friendsOf(u).filter((x) => x !== u), 'rally', u.element);
+      u.status.taunt = a.turns || 3;
       this.float(u, '🎯 Come at me!', 'eff');
       for (const f of this.friendsOf(u).filter((x) => x !== u)) { f.status.rally = a.turns || 3; f.status.rallyAmt = a.rally || 0.3; f.status.rallyBy = u; this.float(f, '🔥 Rallied!', 'heal'); this.updateUnit(f); }
       this.updateUnit(u);
       await sleep(700);
     } else if (a.kind === 'regen') {
       sfx.heal();
-      this.fxOn(targets, 'regen', u.element);
-      for (const t of targets) { t.status.regen = { turns: a.turns || 3, amount: a.amount, src: this.cur }; this.float(t, '🌱 Regrowth', 'heal'); this.updateUnit(t); } this.pendingOvertimeTip = true;
+      for (const t of targets) { t.status.regen = { turns: a.turns || 3, amount: a.amount }; this.float(t, '🌱 Regrowth', 'heal'); this.updateUnit(t); } this.pendingOvertimeTip = true;
       await sleep(700);
     } else if (a.kind === 'debuff') {
       if (a.status?.freeze) sfx.freeze(); else if (a.status?.stun) sfx.stun(); else if (a.status?.slow) sfx.slow(); else sfx.debuff();
@@ -881,13 +779,12 @@ class Battle {
       }
       await sleep(700);
     } else if (a.kind === 'shield') {
-      for (const t of targets) this.addShield(t, a.amount);
+      for (const t of targets) { t.status.shield = (t.status.shield || 0) + Math.round(t.maxHp * a.amount); this.float(t, '🛡️ Shield', 'heal'); this.updateUnit(t); }
       sfx.shield(); await sleep(700);
     } else if (a.kind === 'stamina') {
       if (a.stamina > 0) sfx.haste(); else sfx.slow();
-      if (!a.status) this.fxOn(targets, a.stamina > 0 ? 'haste' : 'slow', u.element);
       for (const t of targets) {
-        const st0 = t.stamina; t.stamina = Math.max(0, Math.min(99, t.stamina + a.stamina)); this.credit(this.cur, 'stam', Math.abs(t.stamina - st0));
+        t.stamina = Math.max(0, Math.min(99, t.stamina + a.stamina));
         if (a.status) this.applyStatus(t, a.status);
         this.float(t, a.stamina > 0 ? '⏩ Faster!' : '🐢 Slowed!', a.stamina > 0 ? 'heal' : 'eff');
         this.updateUnit(t);
@@ -896,77 +793,13 @@ class Battle {
     } else if (a.kind === 'buff') {
       for (const t of targets) {
         this.applyStatus(t, a.status);
-        if (a.shieldSelf) this.addShield(t, a.shieldSelf);
+        if (a.shieldSelf) t.status.shield = (t.status.shield || 0) + Math.round(t.maxHp * a.shieldSelf);
         this.float(t, a.status?.armor ? '🪨 Armored!' : '💪 Empowered!', 'heal');
         this.updateUnit(t);
       }
       if (a.shieldSelf) sfx.shield(); else sfx.buff();
       await sleep(700);
     }
-    await this.riders(u, a);
-  }
-
-  /** Extra effects a move carries after its main one (see WIZARD_ABILITIES in abilities.js), and the streak bonus. */
-  async riders(u, a) {
-    if (!u.alive || this.over) return;
-    const friends = this.friendsOf(u), el = a.fx?.element || u.element;
-    let waited = false;
-    if (a.kind !== 'attack') {
-      if (a.selfHeal) this.heal(u, a.selfHeal);
-      if (a.teamHeal) friends.forEach((f) => this.heal(f, a.teamHeal));
-      if (a.teamShield) friends.forEach((f) => this.addShield(f, a.teamShield, false));
-    } else if (a.teamHeal || a.selfHeal) this.fxOn(a.teamHeal ? friends : [u], 'heal', el);
-    if (a.teamHeal && a.kind !== 'attack') this.fxOn(friends, 'heal', el);
-    if (a.teamShield) { this.fxOn(friends, 'shield', el); friends.forEach((f) => this.float(f, '🛡️ Shield', 'heal')); waited = true; }
-    if (a.shieldSelf && a.kind !== 'buff') this.addShield(u, a.shieldSelf);
-    if (a.selfStatus) { this.applyStatus(u, a.selfStatus); this.float(u, a.selfStatus.armor ? '🪨 Armored!' : a.selfStatus.empower ? '💪 Next hit ×2!' : '✨', 'heal'); waited = true; }
-    if (a.teamStatus) { friends.forEach((f) => { this.applyStatus(f, a.teamStatus); this.float(f, a.teamStatus.armor ? '🪨 Armored!' : '✨', 'heal'); }); waited = true; }
-    if (a.teamStamina) { friends.forEach((f) => { const s0 = f.stamina; f.stamina = Math.min(99, f.stamina + a.teamStamina); this.credit(this.cur, 'stam', f.stamina - s0); f.status.haste = Math.max(f.status.haste || 0, 2); this.updateUnit(f); }); this.fxOn(friends, 'haste', el); waited = true; }
-    if (waited && !ARENA()) await sleep(450);
-    friends.forEach((f) => this.updateUnit(f));
-    // Also zaps an enemy (heals, shields and boosts that would otherwise spend the whole turn).
-    const zap = async (mult, label) => {
-      const pool = this.taunters(u).length ? this.taunters(u) : this.foesOf(u);
-      if (!pool.length || this.over) return;
-      const hit = { id: a.id, name: a.name, kind: 'attack', target: 'enemy', mult, fx: { power: 'basic', element: a.fx?.element } };
-      if (label) this.float(u, label, 'eff');
-      await this.executeInner(u, hit, this.bestTarget(u, hit, pool));
-    };
-    if (a.strike && a.kind !== 'attack') await zap(a.strike);
-    // Answer streak (3 right in a row): this move hits one extra time.
-    if (a.bonusHit) await zap(a.kind === 'attack' ? Math.min(1.2, a.mult || 1) : 0.8, '🔥 Streak bonus!');
-  }
-
-  /** Shield a unit by a share of its max health (and credit the cast for the value log). */
-  addShield(t, frac, show = true) {
-    if (!t.alive) return;
-    const amt = Math.round(t.maxHp * frac);
-    t.status.shield = (t.status.shield || 0) + amt;
-    this.credit(this.cur, 'shield', amt); this.markSrc(t, 'shield');
-    if (show) { this.float(t, '🛡️ Shield', 'heal'); this.fxOn([t], 'shield', t.element); }
-    this.updateUnit(t);
-  }
-
-  /** Play a non-attack effect (heal, shield, freeze, …) on each unit (skipped in arena sims). */
-  fxOn(list, kind, element) {
-    if (ARENA()) return;
-    for (const t of list) if (t?.alive && t.sprite) playBuff(this.field, this.center(t), { kind, element: element || t.element || 'star', scale: t.champ === 'guardian' ? 1.3 : 1 });
-  }
-
-  /** Hit-stop: freeze every animation on the field for a split second. */
-  async hitStop(ms) {
-    const anims = this.field.getAnimations ? this.field.getAnimations({ subtree: true }) : [];
-    anims.forEach((x) => { try { x.pause(); } catch (e) { /* ignore */ } });
-    await sleep(ms);
-    anims.forEach((x) => { try { x.play(); } catch (e) { /* ignore */ } });
-  }
-
-  /** Super Move set piece (Epic pets' once-per-battle move, the wizard's Star Dragon). */
-  async superIntro(u, a, element) {
-    const art = a.super === 'dragon' || u.kind !== 'pet' ? dragonSVG() : creatureSVG(u.species, u.stage, u.rare ? { variant: 'rare' } : {});
-    this.say(`🌟 ${u.name}: ${a.name}!`);
-    sfx.levelUp();
-    await playSuper(this.field, { art, name: a.name, element, side: u.side }).done;
   }
 
   damage(u, a, t, crit, element) {
@@ -980,19 +813,11 @@ class Battle {
     if (t.status.armor && !a.pierce) dmg *= 0.65;
     if (u.side === 'enemy' && this.gentle) dmg *= 0.75;
     dmg = Math.max(u.side === 'enemy' ? 1 : 2, Math.round(dmg));
-    // Value log: extra damage from Empower / Rally, damage held back by Weaken / Armor (credited to the casts behind them).
-    if (u.status.empower) this.credit(u.src?.empower, 'bonus', dmg / 2);
-    if (u.status.rally) this.credit(u.status.rallyBy?.src?.taunt, 'bonus', dmg * (u.status.rallyAmt || 0.3) / (1 + (u.status.rallyAmt || 0.3)));
-    if (u.status.weaken) this.credit(u.src?.weaken, 'prevented', dmg * 0.3 / 0.7);
-    if (t.status.armor && !a.pierce) this.credit(t.src?.armor, 'prevented', dmg * 0.35 / 0.65);
     if (t.status.shield > 0 && !a.pierce) {
       const absorbed = Math.min(t.status.shield, dmg);
       t.status.shield -= absorbed; dmg -= absorbed;
-      if (absorbed) { this.float(t, `🛡️ −${absorbed}`, 'heal'); this.credit(t.src?.shield, 'absorbed', absorbed); }
+      if (absorbed) this.float(t, `🛡️ −${absorbed}`, 'heal');
     }
-    const hp0 = t.hp;
-    this.credit(this.cur, 'dmg', Math.min(hp0, dmg)); this.credit(this.cur, 'over', Math.max(0, dmg - hp0));
-    if (hp0 > 0 && dmg >= hp0) this.credit(this.cur, 'kills', 1);
     t.hp = Math.max(0, t.hp - dmg);
     if (t.pet) t.pet.hp = t.hp;
     if (t.status.taunt && dmg > 0) { this.endTaunt(t); this.float(t, 'Roar broken!', 'eff'); }
@@ -1010,7 +835,6 @@ class Battle {
   heal(t, frac) {
     if (!t.alive) return;
     const amt = Math.round(t.maxHp * frac);
-    this.credit(this.cur, 'heal', Math.min(amt, t.maxHp - t.hp)); this.credit(this.cur, 'overheal', Math.max(0, amt - (t.maxHp - t.hp)));
     t.hp = Math.min(t.maxHp, t.hp + amt);
     if (t.pet) t.pet.hp = t.hp;
     this.float(t, `+${amt}`, 'heal');
@@ -1018,9 +842,7 @@ class Battle {
   }
 
   applyStatus(t, status) {
-    const vis = ['freeze', 'stun', 'slow', 'weaken', 'armor', 'empower', 'haste'].find((k) => status[k]);
-    if (vis) this.fxOn([t], vis);
-    for (const [k, v] of Object.entries(status)) { t.status[k] = Math.max(t.status[k] || 0, v); this.markSrc(t, k); if (this.cur) this.cur.v['st_' + k] = (this.cur.v['st_' + k] || 0) + 1; }
+    for (const [k, v] of Object.entries(status)) t.status[k] = Math.max(t.status[k] || 0, v);
     if (status.freeze) { this.float(t, '❄️ Frozen!', 'eff'); setTimeout(() => sfx.freeze(), 150); }
     if (status.stun) { this.float(t, '💫 Stunned!', 'eff'); setTimeout(() => sfx.stun(), 150); }
     if (status.freeze || status.stun) this.pendingStatusTip = true;
@@ -1098,12 +920,7 @@ class Battle {
     try {
       const u2 = (x) => ({ sp: x.species || x.champ || x.kind, lv: x.level, st: x.stage, cls: x.species ? SPECIES[x.species]?.cls : null, rk: x.pet?.rank || undefined, hp: +(Math.max(0, x.hp) / x.maxHp).toFixed(2), alive: x.alive, caught: !!x.captured });
       track('battle', { kind: this.o.kind, area: this.o.area?.id, result, ms: Date.now() - this.log.t0, turns: this.log.turns, pturns: this.log.playerTurns, q: this.log.questions, ok: this.log.correct, second: this.log.second, hints: this.hints, escale: +(this.enemyScale || 1).toFixed(2), wiz: this.p.wizard.level,
-        team: this.units.filter((x) => x.side === 'ally').map(u2), foes: foes.map(u2), orbCap: this.log.orbCap, orbsLeft: this.magic, casts: this.casts.length });
-      const bid = Math.random().toString(36).slice(2, 8);
-      for (const { t0, v, ...c } of this.casts) {
-        const val = {}; for (const [k, n] of Object.entries(v)) val[k] = Math.round(n);
-        track('cast', { ...c, ...val, bid, bk: this.o.kind, alv: this.o.area?.level ?? 0, res: result });
-      }
+        team: this.units.filter((x) => x.side === 'ally').map(u2), foes: foes.map(u2) });
     } catch (e) { /* never block play */ }
     const allCaught = won && foes.length && foes.every((x) => x.captured);
     this.resolve({
@@ -1168,7 +985,7 @@ const SECOND_TRY = 0.5;
 /** A copy of an ability with its numbers scaled (damage, heals, shields, stamina, buff turns, chance to freeze/stun). */
 function scaleAbility(a, k) {
   const out = { ...a };
-  for (const key of ['mult', 'amount', 'stamina', 'selfHeal', 'teamHeal', 'teamShield', 'selfStamina', 'shieldSelf', 'drain', 'rally', 'strike', 'teamStamina', 'shieldToo']) if (typeof a[key] === 'number') out[key] = a[key] * k;
+  for (const key of ['mult', 'amount', 'stamina', 'selfHeal', 'teamHeal', 'teamShield', 'selfStamina', 'shieldSelf', 'drain', 'rally']) if (typeof a[key] === 'number') out[key] = a[key] * k;
   if (a.dot) out.dot = { ...a.dot, mult: a.dot.mult * k };
   if (a.status) {
     // Attacks: half the chance to freeze/stun. Other spells: effects last half as long (at least 1 turn).

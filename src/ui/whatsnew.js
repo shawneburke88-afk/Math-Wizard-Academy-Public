@@ -18,7 +18,8 @@ export function prepareWhatsNew({ hadPlayed }) {
   if (seen === GAME_VERSION || (!seen && !hadPlayed)) return;
   if (CHANGELOG[0]?.aka?.includes(seen)) return;   // the same build under its old number
   const idx = seen ? CHANGELOG.findIndex((c) => c.v === seen || c.aka?.includes(seen)) : 1;
-  const fresh = CHANGELOG.slice(0, idx < 0 ? CHANGELOG.length : Math.max(1, idx)).slice(0, 4);
+  // A version this build doesn't know (e.g. a newer preview played on this device): just show the latest notes.
+  const fresh = CHANGELOG.slice(0, idx < 0 ? 1 : Math.max(1, idx)).slice(0, 4);
   if (fresh.length) pending = fresh;
 }
 

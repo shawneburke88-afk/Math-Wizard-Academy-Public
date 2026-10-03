@@ -7,19 +7,19 @@
 // Builds before v1.0 were numbered v1–v61 (v61.1 was the build renamed v1.0).
 export const CHANGELOG = [
   {
-    v: 'v2.0', date: '2026-10-03',
-    added: [
-      'Rare pets each have their own signature move, and Epic pets have a once-per-battle Super Move!',
-      'Every move now has its own animation: heals, shields, freezes, speed-ups and more.',
-      'Answer 3 in a row and your next move hits one extra time.',
-      'Sparkly pets bring an extra magic orb into every battle.',
-      'The wizard learns new spells at higher levels, up to the Star Dragon.',
-    ],
+    v: 'v1.2', date: '2026-10-03',
+    added: [],
     changed: [
-      'Weak moves now do something right away, and stronger moves replace older ones of the same kind.',
-      'Rarer pets evolve at the same levels as common ones.',
-      'The wizard levels up faster.',
-      'Fixed: Hex and Challenge Roar now last as long as they say.',
+      'The world opens more gently on iPads inside the Claude app (lighter graphics, drawn in smaller batches).',
+      'If the world ever fails to open, the game switches that device to lighter graphics.',
+    ],
+  },
+  {
+    v: 'v1.1', date: '2026-10-03',
+    added: [],
+    changed: [
+      'Backups: when there’s new progress, the wizard screen offers a one-tap “Save a backup?”.',
+      'On a computer, the game keeps your backup file up to date by itself after the first save.',
     ],
   },
   {

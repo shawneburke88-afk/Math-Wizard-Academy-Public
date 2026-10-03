@@ -382,7 +382,7 @@ export function backupFileText() {
 }
 
 /** A number that goes up with any play: questions answered, minutes played and wizards made, across the family. */
-function progressMark() {
+export function progressMark() {
   return (current?.profiles || []).reduce((n, p) => n + 1 + (p.stats?.answered || 0) + Math.floor((p.stats?.playMs || 0) / 60000), 0);
 }
 
