@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Math Wizard Academy</title>
+  <meta name="description" content="A math adventure game for kids, following the New Brunswick curriculum.">
+  <meta name="theme-color" content="#2a1b4d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Math Wizard">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="src/ui/styles.css">
+</head>
+<body>
+  <div id="game"></div>
+  <div id="ui"></div>
+  <div id="boot" class="boot">
+    <div class="boot-star">✦</div>
+    <div class="boot-title">Math Wizard Academy</div>
+    <div class="boot-sub" id="boot-msg">Loading…</div>
+  </div>
+  <script src="lib/phaser.min.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
