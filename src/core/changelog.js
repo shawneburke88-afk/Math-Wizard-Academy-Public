@@ -7,6 +7,13 @@
 // Builds before v1.0 were numbered v1–v61 (v61.1 was the build renamed v1.0).
 export const CHANGELOG = [
   {
+    v: 'v1.3', date: '2026-10-03',
+    added: [],
+    changed: [
+      'iPads and iPhones now use lighter graphics, so the world uses much less memory (Safari could close the page as the world appeared).',
+    ],
+  },
+  {
     v: 'v1.2', date: '2026-10-03',
     added: [],
     changed: [

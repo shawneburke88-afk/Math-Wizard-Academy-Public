@@ -1,7 +1,7 @@
 // App controller: home screen <-> world, and everything that happens in the world (encounters, NPCs, rewards).
 import { load, persist, requestPersistence, currentFamily, flushCloud, closeFamily, families, backupDue } from './core/save.js';
 import { prepareWhatsNew } from './ui/whatsnew.js';
-import { checkLastLoad, takeLoadFailure, loadStep, loadDone, liteMode } from './core/loadguard.js';
+import { checkLastLoad, takeLoadFailure, loadStep, loadDone, loadSettled, liteMode } from './core/loadguard.js';
 import { showWelcome } from './ui/welcome.js';
 import { clearUI, toast, banner, h, mount } from './ui/dom.js';
 import { showHome } from './ui/home.js';
@@ -91,6 +91,7 @@ function goHome() {
   if (playTimer) { clearInterval(playTimer); playTimer = null; }
   if (P) { track('session_end', { ms: Date.now() - (sessionStart || Date.now()), wiz: P.wizard.level, pets: P.pets.length }); persist(); flushPlaydata(); flushCloud(); P = null; setActiveProfile(null); }
   stopOverworld();
+  loadSettled();
   if (updateReady) { location.reload(); return; }   // a new version arrived while playing: switch to it now (progress is saved)
   hideHud();
   clearUI();

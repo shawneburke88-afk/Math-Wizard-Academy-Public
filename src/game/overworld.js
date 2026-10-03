@@ -14,8 +14,8 @@ import { sceneryTextureJobs, dressWorld, updateScenery } from './scenery.js';
 import { liteMode, loadStep } from '../core/loadguard.js';
 const SPECIES_IDS = Object.keys(SPECIES);
 
-// Lighter graphics (normal sharpness instead of double, pictures drawn in smaller batches) on iPads inside the Claude
-// app / claude.ai, and on any device where the world once failed to open (see core/loadguard.js).
+// Lighter graphics (normal sharpness instead of double, no screen smoothing, pictures drawn in smaller batches) on
+// iPads / iPhones, and on any device where the world once failed to open (see core/loadguard.js).
 // Worked out each time the world opens (a failed load switches the device to light mode at the next start).
 let LITE = false, RES = 1, TEX = TILE;
 function pickResolution() {
@@ -50,7 +50,8 @@ export function startOverworld(profile, hooks) {
     parent: 'game',
     backgroundColor: '#1d1236',
     scale: { mode: Phaser.Scale.NONE, width: iw * RES, height: ih * RES, zoom: 1 / RES },
-    render: { antialias: true, pixelArt: false, roundPixels: false },
+    // antialiasGL off in light mode: the smoothed (multisampled) screen buffers cost a lot of graphics memory on iPads.
+    render: { antialias: true, antialiasGL: !LITE, pixelArt: false, roundPixels: false },
     input: { activePointers: 2 },
     scene: [],
     banner: false,
