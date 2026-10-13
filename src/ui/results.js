@@ -3,9 +3,9 @@ import { h, svgEl, mount } from './dom.js';
 import { wizardSVG } from '../art/wizard.js';
 import { creatureSVG } from '../art/creatures.js';
 import { itemSVG } from '../art/items.js';
-import { xpToNext, speciesName } from '../content/species.js';
+import { xpToNext, speciesName, SPECIES, ELEMENTS, ROLES } from '../content/species.js';
 import { RARITY_INFO, statLabel, WIZARD_SLOTS } from '../content/items.js';
-import { teamPets, readyToEvolve } from '../game/progress.js';
+import { teamPets, readyToEvolve, fullStats } from '../game/progress.js';
 import { persist } from '../core/save.js';
 import { sfx } from '../core/sfx.js';
 import { tip, say } from './tutorial.js';
@@ -47,6 +47,27 @@ function compareToEquipped(profile, it) {
  * opts: { profile, res, title, sub, coins, items: [], quests: [strings], area (for the faded region art behind) }
  * Resolves when the player taps Continue.
  */
+/** A new friend next to the team: its power and health against the team's average, and whether it would help. */
+function newFriendCard(profile, pet) {
+  const s = fullStats(profile, pet), sp = SPECIES[pet.species], E = ELEMENTS[sp.element];
+  const others = teamPets(profile).filter((p) => p.id !== pet.id);
+  const onTeam = profile.team.includes(pet.id);
+  const avg = (k) => (others.length ? Math.round(others.reduce((a, p) => a + fullStats(profile, p)[k], 0) / others.length) : null);
+  const cmp = (v, a) => (a == null ? '' : v > a * 1.05 ? ' ▲' : v < a * 0.95 ? ' ▼' : ' ≈');
+  const stat = (icon, label, v, a) => h('div.nf-stat' + (a != null && v > a * 1.05 ? '.up' : a != null && v < a * 0.95 ? '.down' : ''), `${icon} ${label} ${Math.round(v)}${cmp(v, a)}`, a != null ? h('span.nf-avg', ` team avg ${a}`) : null);
+  const score = (st) => st.power + st.maxHp / 3;
+  const beats = others.filter((p) => score(fullStats(profile, p)) < score(s)).length;
+  const note = onTeam ? 'It joined your team!'
+    : beats ? `Stronger than ${beats} of your team pets. Swap it in from 🐾 Team!` : 'Keep training it to make it stronger.';
+  return h('div.nf-card',
+    svgEl(creatureSVG(pet.species, pet.stage, { mood: 'happy', ...(pet.rare ? { variant: 'rare' } : {}) }), 'nf-art'),
+    h('div',
+      h('div.nf-name', `🤝 ${speciesName(pet)} joined you!`),
+      h('div.nf-sub', `Lv ${pet.level} · ${E.icon} ${E.name} · ${ROLES[sp.role]?.name || sp.role}`),
+      h('div.nf-stats', stat('⚔', 'Power', s.power, avg('power')), stat('❤', 'Health', s.maxHp, avg('maxHp'))),
+      h('div.nf-note', note)));
+}
+
 export function showResults({ profile, res, title, sub, coins = 0, items = [], quests = [], area = null }) {
   return new Promise((resolve) => {
     const before = res.before || { wizard: profile.wizard, pets: {} };
@@ -96,7 +117,6 @@ export function showResults({ profile, res, title, sub, coins = 0, items = [], q
     const chips = [];
     if (coins) chips.push(h('div.res-chip', `🪙 +${coins} coins`));
     if (res.xp) chips.push(h('div.res-chip', `✨ +${res.xp} XP`));
-    for (const pet of res.caughtList || []) chips.push(h('div.res-chip', `🤝 ${speciesName(pet)} joined you!`));
     for (const s of [...new Set(res.tierUps || [])]) chips.push(h('div.res-chip', `⬆ Skill up: ${s}`));
     for (const q of quests) chips.push(h('div.res-chip', `📜 Quest complete: ${q}`));
 
@@ -104,6 +124,7 @@ export function showResults({ profile, res, title, sub, coins = 0, items = [], q
       area ? regionBackdrop(area) : null,
       h('h1', title), sub ? h('div.sub', sub) : null,
       h('div.res-grid', ...cards),
+      (res.caughtList || []).length ? h('div.res-section', ...res.caughtList.map((pet) => newFriendCard(profile, pet))) : null,
       chips.length ? h('div.res-section', h('div.res-chips', ...chips)) : null,
       itemEls.length ? h('div.res-section', h('h2', items.length > 1 ? 'Items found' : 'Item found'), h('div.res-items', ...itemEls)) : null,
       h('div.center', { style: { marginTop: '18px' } }, h('button.btn', { onclick: () => { el.remove(); resolve(); } }, 'Continue ▸')));

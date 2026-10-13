@@ -50,6 +50,10 @@ export const TIPS = {
   coins: { title: 'Coins', text: 'You won coins! Save them to evolve and merge your pets, or buy gear at Gideon’s Shop in town. Tap your 🪙 coins at the top any time to see what they buy.', highlight: '.coins' },
   teamFull: { title: 'Team is full', text: 'You can take 3 pets into battle. New friends wait in your collection. Swap them in any time from 🐾 Team.', highlight: '.icon-btn' },
   typeLoss: { title: 'Strong and weak', text: 'That team was strong against your pets.' },   // text is built after the battle (main.js typeTip)
+  streak: { title: 'Answer streak!', text: 'Three right answers in a row! Your next move hits one extra time. Keep it up!', highlight: '.bf-magic' },
+  monoTeam: { title: 'Mix up your team', text: 'A team of different kinds of pets is safer.' },   // text is built after the battle (main.js monoTeamTip)
+  foeMagic: { title: 'Enemy magic', text: 'Enemies have magic orbs too! They earn one each turn and spend them on special moves. When their bar glows ⚡ they can use their biggest move, so get ready! A pet with Sap can steal their orbs.', highlight: '.bf-foe-magic' },
+  superMove: { title: 'Super Move!', text: 'Epic pets have a Super Move. It\u2019s super strong, but each pet can use it only once per battle, so pick your moment!' },
   skillUp: { title: 'Skill up!', text: 'When you get several right in a row, the questions get a bit harder. That means you’re learning!' },
 };
 

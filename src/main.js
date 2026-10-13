@@ -10,7 +10,7 @@ import { startOverworld, stopOverworld, worldScene, sleepWorld } from './game/ov
 import { showHud, hideHud, showQuestTracker, talk, celebrate, openTeam, openBag, openQuests, openBook, openMap, openMenu, openShop, openCoins, dialog } from './ui/hud.js';
 import { runBattle, snapshot } from './ui/battle.js';
 import { showResults } from './ui/results.js';
-import { tip, seen, tipsOn } from './ui/tutorial.js';
+import { tip, seen, tipsOn, say } from './ui/tutorial.js';
 import { askQuestion } from './ui/question.js';
 import { runPendingLesson, openAcademy } from './ui/lesson.js';
 import { runSprint } from './ui/sprint.js';
@@ -191,9 +191,39 @@ function onAreaChange(a, initial) {
   if (JSON.stringify(P.strandAnchor || {}) !== anchorsBefore) worldScene()?.rescaleRegion(a.region);
   if (!initial || first) banner(a.name, a.level ? `${regionLabel(a.region)} · ${depthLabel(a)}` : 'Home base');
   if (first && a.level > 0) setTimeout(() => { toast('New quests! Tap 📜 Quests to see them.'); worldTip('region'); }, 1500);
+  if (!initial) setTimeout(() => areaTypeWarning(a), 2600);
   refreshHud();
 }
 const regionLabel = (r) => ({ number: 'Number Sense', patterns: 'Patterns and Relations', shape: 'Shape and Space', stats: 'Statistics and Probability' }[r] || '');
+
+// The element most of a region's wild pets have (75% of them are natives of the region's strand).
+function zoneElement(region) {
+  const els = (REGION_SPECIES[region] || []).map((sp) => SPECIES[sp].element);
+  return els.sort((x, y) => els.filter((e) => e === y).length - els.filter((e) => e === x).length)[0] || null;
+}
+/** Hoot's heads-up on entering a deeper area (2+) whose wild pets are strong against at least half the team (once per
+ *  area). Deep areas only exist in their own region, so the advice is to bring a pet that beats them. */
+async function areaTypeWarning(a) {
+  if (!P || !a || a.level < 2 || busy || !tipsOn(P) || document.querySelector('.modal-back, .dialog, .celebrate, .results, .battle, .tut')) return;
+  P.typeWarned ||= {};
+  if (P.typeWarned[a.id]) return;
+  const zone = zoneElement(a.region), pets = teamPets(P);
+  if (!zone || pets.length < 2) return;
+  const weak = pets.filter((p) => strongAgainst(zone) === SPECIES[p.species].element);
+  if (weak.length * 2 < pets.length) return;
+  P.typeWarned[a.id] = true; persist();
+  const E = ELEMENTS[zone], mine = ELEMENTS[strongAgainst(zone)], counter = weakAgainst(zone), C = ELEMENTS[counter];
+  const spare = P.pets.filter((p) => SPECIES[p.species].element === counter && !P.team.includes(p.id)).sort((x, y) => y.level - x.level)[0];
+  const home = AREAS.find((x) => x.region === C.strand && x.level === 1)?.name;
+  const text = `Most wild pets in ${a.name} are ${E.icon} ${E.name} pets, and they’re strong against your ${mine.icon} ${mine.name} pets. ${C.icon} ${C.name} beats ${E.icon} ${E.name}! `
+    + (spare ? `Try putting your ${speciesName(spare)} on your team from 🐾 Team.` : `${C.name} pets live in the ${regionLabel(C.strand)} region${home ? ` (start at ${home})` : ''}. Befriend one to bring here.`);
+  const scene = worldScene();
+  scene?.freeze(true);
+  await say(P, '⚠️ Heads up!', text);
+  if (!busy && !document.querySelector('.modal-back, .dialog, .celebrate, .results, .battle')) scene?.freeze(false);
+}
+
+window.__mwaTest = { areaTypeWarning: (id) => areaTypeWarning(areaById(id)) };   // test hook
 
 // Show a first-time tip in the open world, pausing movement while Hoot talks.
 async function worldTip(id) {
@@ -231,7 +261,8 @@ function teamLevel() {
 }
 
 // Wild groups: mostly single pets in the first subzone, bigger packs (sometimes with a leader) deeper in [TUNABLE].
-const GROUP_ODDS = { 1: [0.62, 0.92], 2: [0.5, 0.88], 3: [0.38, 0.78], 4: [0.3, 0.7] };   // chance of 1 pet, of ≤ 2 pets
+// v2.0: more pairs in areas 1–2 (were 0.62/0.92 and 0.5/0.88) so team moves and enemy magic matter earlier [TUNABLE].
+const GROUP_ODDS = { 1: [0.55, 0.9], 2: [0.4, 0.82], 3: [0.38, 0.78], 4: [0.3, 0.7] };   // chance of 1 pet, of ≤ 2 pets
 function wildGroup(area, firstSpecies, firstLevel, firstStage) {
   const r = rand();
   const [one, two] = GROUP_ODDS[area.level] || GROUP_ODDS[1];
@@ -411,7 +442,7 @@ async function afterBattle(res, source, area, { hints = res.hints || 0, sub = ''
     const camp = area && FEATURES[area.id]?.camp;
     worldScene()?.teleport(camp ? camp.x + 2 : START.x, camp ? camp.y + 1 : START.y);
     if (camp) findPortal(area.id);
-    await typeTip(res);
+    if (!(await typeTip(res))) await monoTeamTip();
   }
   persist();
   await runPendingLesson(P, { autoRead: autoRead(P) });
@@ -506,10 +537,10 @@ function watchModalThenUnfreeze() {
 async function typeTip(res) {
   const el = (sp) => SPECIES[sp]?.element;
   const team = (res.teamSpecies || []).map(el).filter(Boolean), foes = (res.foeSpecies || []).map(el).filter(Boolean);
-  if (!team.length || !foes.length) return;
+  if (!team.length || !foes.length) return false;
   const count = (list, e) => list.filter((x) => x === e).length;
   const strong = [...new Set(foes)].filter((e) => count(team, strongAgainst(e)) * 2 >= team.length).sort((a, b) => count(foes, b) - count(foes, a))[0];
-  if (!strong) return;
+  if (!strong) return false;
   const E = ELEMENTS[strong], mine = ELEMENTS[strongAgainst(strong)], counter = weakAgainst(strong), C = ELEMENTS[counter];
   const text = [`Those ${E.icon} ${E.name} pets were strong against your ${mine.icon} ${mine.name} pets, so they hit harder and your attacks did less.`];
   const onTeam = teamPets(P).find((p) => el(p.species) === counter);
@@ -519,6 +550,15 @@ async function typeTip(res) {
   else if (spare) text.push(`${C.icon} ${C.name} beats ${E.icon} ${E.name}! Try putting your ${speciesName(spare)} on your team from 🐾 Team before you battle them again.`);
   else text.push(`${C.icon} ${C.name} beats ${E.icon} ${E.name}! ${C.name} pets live in the ${regionLabel(C.strand)} region${home ? ` (start at ${home})` : ''}. Befriend one to bring next time.`);
   await tip(P, 'typeLoss', { text });
+  return true;
+}
+// After a loss with a team that's all one element: Hoot suggests mixing (a normal tip: up to 3 times).
+async function monoTeamTip() {
+  const els = teamPets(P).map((p) => SPECIES[p.species].element);
+  if (els.length < 2 || new Set(els).size > 1) return false;
+  const E = ELEMENTS[els[0]], C = ELEMENTS[weakAgainst(els[0])];
+  await tip(P, 'monoTeam', { text: `All your team pets are ${E.icon} ${E.name} pets, so anything strong against ${E.name} is strong against your whole team (like ${C.icon} ${C.name} pets). A mix of kinds is safer: then some of your pets are strong whatever you meet. Try swapping one in from 🐾 Team.` });
+  return true;
 }
 
 // A portal counts as found once the wizard walks up to it; then the World Map can travel there from anywhere.

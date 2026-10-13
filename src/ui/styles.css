@@ -720,6 +720,30 @@ textarea { width: 100%; min-height: 110px; font-size: 13px; -webkit-user-select:
 }
 .pv-skill-stats .tiers { width: 80px; }
 
+/* Super Move set piece (Epic pets' once-per-battle move, the wizard's Star Dragon) */
+.super-move { position: absolute; inset: 0; z-index: 40; pointer-events: none; overflow: hidden; }
+.super-move .sm-dim { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(43,33,64,.35), rgba(20,12,36,.82)); animation: smFade .25s ease-out both; }
+.super-move .sm-rays { position: absolute; left: 50%; top: 45%; width: 160vmax; height: 160vmax; margin: -80vmax 0 0 -80vmax;
+  background: repeating-conic-gradient(from 0deg, var(--sm-main) 0 6deg, transparent 6deg 18deg); opacity: .35; animation: smSpin 1.4s linear both, smFade .3s ease-out both; }
+.super-move .sm-art { position: absolute; top: 12%; width: min(46%, 380px); aspect-ratio: 1; left: 50%; filter: drop-shadow(0 6px 0 rgba(43,33,64,.5)) drop-shadow(0 0 24px rgba(255,255,255,.6)); animation: smSweepIn .5s cubic-bezier(.2,.9,.3,1.2) both; }
+.super-move.enemy .sm-art { animation-name: smSweepInR; }
+.super-move .sm-art svg { width: 100%; height: 100%; }
+.super-move .sm-name { position: absolute; left: 0; right: 0; bottom: 14%; text-align: center; color: #fff; text-shadow: 0 3px 0 #2b2140, 0 0 18px rgba(255,210,63,.8); animation: smPop .45s .25s cubic-bezier(.2,.9,.3,1.4) both; }
+.super-move .sm-name span { display: block; font-weight: 900; letter-spacing: .25em; font-size: clamp(12px, 2.2vw, 18px); color: #ffd23f; }
+.super-move .sm-name b { display: block; font-size: clamp(26px, 5.5vw, 52px); font-weight: 900; }
+.super-move.out { animation: smFade .26s ease-in reverse both; }
+@keyframes smFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes smSpin { from { transform: rotate(0deg) scale(.6); } to { transform: rotate(40deg) scale(1); } }
+@keyframes smSweepIn { from { transform: translate(-160%, 20%) scale(.6) rotate(-12deg); } to { transform: translate(-50%, 0) scale(1) rotate(0); } }
+@keyframes smSweepInR { from { transform: translate(60%, 20%) scale(.6) rotate(12deg); } to { transform: translate(-50%, 0) scale(1) rotate(0); } }
+@keyframes smPop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .super-move .sm-rays { animation: none; } }
+
+/* Answer streak: 3 right in a row */
+.bf-magic.streak { box-shadow: 0 0 0 3px #ffb03b, 0 0 18px #ffb03b; border-radius: 999px; }
+.streak-badge { margin-left: 8px; font-weight: 900; color: #c25a00; background: #fff1cc; border-radius: 999px; padding: 2px 8px; font-size: .85em; }
+.ab-btn.used { opacity: .5; }
+.ab-btn.signature { box-shadow: inset 0 0 0 3px #ffd23f, 0 0 12px rgba(255,210,63,.6); }
 /* Backups */
 .backup-nudge { display: block; margin: 6px auto 0; max-width: 560px; border: 0; border-radius: 14px; padding: 10px 14px; font-weight: 800; color: #5a3b00; background: #fff1cc; box-shadow: 0 3px 0 #d9a93a; cursor: pointer; }
 .welcome-foot .restore-btn { margin-right: 8px; }
@@ -735,3 +759,22 @@ textarea { width: 100%; min-height: 110px; font-size: 13px; -webkit-user-select:
 .wn-head.small { font-size: 1em; color: #6b5f86; margin-top: 14px; }
 .wn-list { margin: 0 0 4px 0; padding-left: 22px; font-size: 18px; font-weight: 700; line-height: 1.45; }
 .wn-list.small { font-size: 15px; font-weight: 600; color: #4a405e; }
+
+/* v2.0: the enemy team's magic bar (top right of the battlefield); glows when it can afford its biggest move */
+.bf-foe-magic { position: absolute; top: 8px; right: 10px; z-index: 30; display: flex; gap: 3px; align-items: center; padding: 4px 9px; border-radius: 999px; background: rgba(43, 33, 64, .72); color: #fff; font-size: 12px; font-weight: 900; white-space: nowrap; pointer-events: none; }
+.bf-foe-magic .orb { width: 14px; height: 14px; background: #4a3d63; border-color: #6d5f88; }
+.bf-foe-magic .orb.on { background: radial-gradient(circle at 35% 35%, #fff, #e0525e 60%); border-color: #9b2232; box-shadow: 0 0 7px #ff8a94; }
+.bf-foe-magic.charged { animation: foeCharged 1s ease-in-out infinite; }
+.bf-foe-magic .charged-badge { margin-left: 4px; color: #ffd23f; }
+@keyframes foeCharged { 0%, 100% { box-shadow: 0 0 0 2px #ff8a94, 0 0 10px #e0525e; } 50% { box-shadow: 0 0 0 3px #ffd23f, 0 0 22px #ff8a94; } }
+@media (max-width: 700px) { .bf-foe-magic { font-size: 0; gap: 2px; } .bf-foe-magic .orb { width: 11px; height: 11px; } .bf-foe-magic .charged-badge { font-size: 11px; } }
+
+/* v2.0: a new friend on the results screen, compared with the team */
+.nf-card { display: flex; gap: 12px; align-items: center; background: rgba(255,255,255,.95); color: var(--ink); border-radius: 16px; padding: 10px 14px; margin-bottom: 8px; box-shadow: 0 4px 0 rgba(0,0,0,.12); }
+.nf-art { width: 72px; height: 72px; flex: none; } .nf-art svg { width: 100%; height: 100%; }
+.nf-name { font-weight: 900; font-size: 16px; }
+.nf-sub { font-size: 13px; font-weight: 700; opacity: .8; }
+.nf-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-weight: 800; font-size: 14px; }
+.nf-stat.up { color: #1f8a4c; } .nf-stat.down { color: #b3261e; }
+.nf-avg { font-weight: 600; font-size: 12px; color: var(--ink); opacity: .65; }
+.nf-note { margin-top: 4px; font-size: 13px; font-weight: 800; color: #5e3fb3; }

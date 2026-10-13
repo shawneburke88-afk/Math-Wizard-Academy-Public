@@ -132,7 +132,9 @@ export function evolve(profile, pet) {
   persist();
 }
 
-export const wizardXpNeeded = (level) => Math.round(40 + 20 * level + level * level);
+// v62: a gentler curve (was 40 + 20L + L²): v61 bot wizards reached only level 17–18 while their pets reached 34–36,
+// so the wizard's big spells (Thunderstorm at 16, Star Dragon at 30) came too late or never [TUNABLE].
+export const wizardXpNeeded = (level) => Math.round(25 + 8 * level + 0.2 * level * level);
 
 export function giveWizardXP(profile, amount) {
   const w = profile.wizard;
@@ -143,11 +145,13 @@ export function giveWizardXP(profile, amount) {
 }
 
 // ---------- enemy scaling ----------
-// How much stronger the team is than plain Common, unevolved, gear-free pets of the same level (1 = the same).
+// How much stronger the team is than plain unevolved, gear-free pets of the same level and rarity (1 = the same).
+// v2.0: rarity no longer counts, so enemies don't absorb any of a Rare / Epic pet's edge (v2.0 bots with all-Rare teams
+// met enemies ~15% stronger than Common teams did and lost more often, the opposite of rarer pets feeling cooler).
 export function teamPowerRatio(profile) {
   const team = teamPets(profile);
   if (!team.length) return 1;
-  const r = team.map((p) => fullStats(profile, p).power / petStats({ species: 'numberling', stage: 1, level: p.level, rank: 1 }).power);
+  const r = team.map((p) => fullStats(profile, p).power / petStats({ species: 'numberling', stage: 1, level: p.level, rank: 1 }).power / (CLASSES[SPECIES[p.species]?.cls]?.mult || 1));
   return r.reduce((a, b) => a + b, 0) / r.length;
 }
 // Enemies absorb this share of the team's extra strength (gear, merges, rarer and evolved pets) [TUNABLE]: upgrades
