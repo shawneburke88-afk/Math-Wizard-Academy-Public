@@ -588,22 +588,57 @@ textarea { width: 100%; min-height: 110px; font-size: 13px; -webkit-user-select:
 .sprint-medal { font-size: 30px; }
 
 /* Welcome + family screens */
-.welcome { display: flex; flex-direction: column; align-items: center; padding-top: calc(10px + var(--safe-top)); overflow-y: auto; }
-.welcome-art { position: relative; width: min(760px, 96vw); height: min(300px, 38vh); flex: none; margin-top: 4px; }
-.w-moon { position: absolute; right: 8%; top: 4%; width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff9dc, #ffe38a 60%, #f3c64a); box-shadow: 0 0 40px 10px rgba(255,230,140,.35); }
-.w-academy { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: 88%; }
-.w-academy svg, .w-wizard svg, .w-pet svg { width: 100%; height: 100%; }
-.w-wizard { position: absolute; left: 6%; bottom: 0; width: 18%; height: 62%; animation: bob 3s ease-in-out infinite; }
-.w-pet { position: absolute; bottom: 0; width: 16%; height: 42%; }
-.w-pet.p1 { right: 14%; animation: bob 2.6s ease-in-out infinite; }
-.w-pet.p2 { left: 24%; bottom: 46%; width: 11%; height: 26%; animation: bob 1.4s ease-in-out infinite; }
-.w-pet.p3 { right: 0; width: 14%; height: 44%; animation: bob 3.4s ease-in-out infinite .4s; }
-.w-spark { position: absolute; left: 30%; top: 12%; color: #fff6c8; font-size: 22px; animation: twinkle 2s ease-in-out infinite; }
-.w-spark.s2 { left: 64%; top: 26%; font-size: 16px; animation-delay: .7s; } .w-spark.s3 { left: 14%; top: 30%; font-size: 14px; animation-delay: 1.3s; }
+.welcome { padding: 0; overflow: hidden; color: #fff; background: linear-gradient(180deg, #120b2e 0%, #1b1140 55%, #251853 100%); }
+/* The scene is the whole screen's background (two stacked SVGs with drifting mist between and over them);
+   the title and family cards scroll on top of it. .welcome-gap keeps the Academy part of the picture clear. */
+.welcome-hero { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.welcome-body { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; align-items: center; padding: 0 0 calc(16px + var(--safe-bottom)); }
+.welcome-gap { width: 100%; height: clamp(250px, 46vh, 440px); flex: none; }
+.ws-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ws-mist { position: absolute; left: 0; width: calc(100% + 1000px); background-repeat: repeat-x; background-size: 1000px 100%; animation: ws-mist 90s linear infinite; will-change: transform; }
+.ws-mist.m1 { top: calc((var(--ws-oy, 0) + 318 * var(--ws-s, 1)) * 1px); height: calc(80 * var(--ws-s, 1) * 1px);
+  background-image: radial-gradient(ellipse 17% 46% at 18% 52%, rgba(243,217,255,.34), transparent 100%), radial-gradient(ellipse 22% 40% at 52% 56%, rgba(243,217,255,.26), transparent 100%), radial-gradient(ellipse 13% 44% at 82% 48%, rgba(243,217,255,.3), transparent 100%); }
+.ws-mist.m2 { top: calc((var(--ws-oy, 0) + 500 * var(--ws-s, 1)) * 1px); height: calc(260 * var(--ws-s, 1) * 1px); animation-duration: 140s; animation-direction: reverse;
+  background-image: radial-gradient(ellipse 20% 34% at 24% 40%, rgba(200,186,255,.16), transparent 100%), radial-gradient(ellipse 16% 30% at 60% 66%, rgba(200,186,255,.13), transparent 100%), radial-gradient(ellipse 12% 26% at 86% 34%, rgba(200,186,255,.14), transparent 100%); }
+.ws-corner { position: absolute; bottom: -4px; width: clamp(120px, 25vw, 340px); height: auto; aspect-ratio: 3 / 2; transform-origin: 50% 100%; animation: ws-sway 7s ease-in-out infinite alternate; will-change: transform; }
+.ws-corner.l { left: -8px; } .ws-corner.r { right: -8px; animation-duration: 8.5s; animation-delay: -3s; }
+.ws-cloud { animation: ws-cloud 60s ease-in-out infinite alternate; }
+.ws-flow { animation: ws-flow 2.2s linear infinite; }
+.ws-tw { animation: ws-tw 3.2s ease-in-out infinite; }
+.ws-bob, .ws-sym { animation: ws-bob 3.2s ease-in-out infinite; }
+.ws-sym { animation-duration: 2.8s; }
+.ws-hover { animation: ws-hover 1.8s ease-in-out infinite; }
+.ws-flag { animation: ws-flag 1.7s ease-in-out infinite; }
+.ws-flick { animation: ws-flick 2.6s ease-in-out infinite; }
+.ws-beacon { animation: ws-beacon 2.4s ease-in-out infinite; }
+.ws-fly { animation: ws-fly 5s ease-in-out infinite; }
+.ws-shoot { animation: ws-shoot 9s linear infinite; opacity: 0; }
+.ws-aurora { animation: ws-aurora 14s ease-in-out infinite alternate; }
+@keyframes ws-tw { 50% { opacity: .15; } }
+@keyframes ws-bob { 50% { transform: translateY(-5px); } }
+@keyframes ws-hover { 50% { transform: translate(-4px, -8px); } }
+@keyframes ws-flag { 50% { transform: skewY(9deg) scaleX(.86); } }
+@keyframes ws-flick { 50% { opacity: .68; } }
+@keyframes ws-beacon { 50% { transform: scale(1.14); } }
+@keyframes ws-fly { 0%, 100% { transform: translate(0, 0); opacity: .15; } 50% { transform: translate(14px, -18px); opacity: 1; } }
+@keyframes ws-shoot { 0%, 85% { transform: translate(var(--sx0), var(--sy0)); opacity: 0; } 87% { opacity: 1; } 93% { opacity: 1; } 96%, 100% { transform: translate(var(--sx1), var(--sy1)); opacity: 0; } }
+@keyframes ws-sway { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
+@keyframes ws-mist { to { transform: translate3d(-1000px, 0, 0); } }
+@keyframes ws-cloud { from { transform: translateX(-50px); } to { transform: translateX(70px); } }
+@keyframes ws-flow { to { stroke-dashoffset: -22; } }
+@keyframes ws-aurora { from { transform: translateX(-30px); opacity: .75; } to { transform: translateX(30px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ws-svg *, .ws-mist, .ws-corner { animation: none !important; } }
 @keyframes bob { 50% { transform: translateY(-8px); } }
 @keyframes twinkle { 50% { opacity: .2; transform: scale(.6); } }
-.welcome-title { font-size: clamp(34px, 6vw, 56px); font-weight: 900; color: #fff; text-shadow: 0 4px 0 #5b3fb8, 0 0 24px rgba(180,150,255,.7); text-align: center; margin-top: 8px; }
-.welcome-sub { color: #e8e0ff; font-size: 22px; font-weight: 800; margin: 6px 0 14px; text-align: center; }
+/* Logo: chunky gold letters on a dark outline (the outline layer is a copy of the text behind the gold fill). */
+.welcome-logo { display: flex; align-items: center; justify-content: center; gap: .28em; margin-top: 4px; padding: 0 12px; font-size: clamp(34px, 6.4vw, 62px); font-weight: 900; line-height: 1.06; text-align: center; }
+.welcome-title { position: relative; z-index: 0; letter-spacing: .01em; }
+.welcome-title::before { content: attr(data-text); position: absolute; inset: 0; z-index: -1; color: #2b2140; -webkit-text-stroke: .17em #2b2140;
+  text-shadow: 0 .1em 0 #2b2140, 0 .17em 0 #6a48d0, 0 0 .55em rgba(255,196,96,.55); }
+.wt-fill { background: linear-gradient(180deg, #fffce6 0%, #ffe680 40%, #ffb84a 76%, #ff9a3c 100%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+.wl-spark { color: #fff6c8; font-size: .62em; text-shadow: 0 0 .5em #ffd76a; animation: twinkle 2.4s ease-in-out infinite; }
+.wl-spark.s2 { animation-delay: 1.2s; }
+.welcome-sub { color: #e8e0ff; font-size: 22px; font-weight: 800; margin: 6px 0 14px; text-align: center; text-shadow: 0 2px 8px rgba(12,7,48,.9), 0 0 2px rgba(12,7,48,.9); }
 .family-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; width: min(900px, 94vw); }
 .family-tile { border: 0; border-radius: 26px; padding: 12px 10px 14px; background: linear-gradient(180deg, #fff, #efe6ff); box-shadow: 0 8px 0 #9a86cf; cursor: pointer; color: var(--ink); display: flex; flex-direction: column; align-items: center; }
 .family-tile:active { transform: translateY(5px); box-shadow: 0 3px 0 #9a86cf; }
@@ -612,6 +647,8 @@ textarea { width: 100%; min-height: 110px; font-size: 13px; -webkit-user-select:
 .family-tile .finfo { font-size: 14px; color: var(--ink-soft); font-weight: 700; }
 .family-tile.new { background: rgba(255,255,255,.12); color: #fff; border: 3px dashed rgba(255,255,255,.5); box-shadow: none; justify-content: center; min-height: 190px; }
 .family-tile.new .plus { font-size: 60px; line-height: 1; }
+.welcome .family-list { display: flex; flex-wrap: wrap; justify-content: center; }
+.welcome .family-tile { width: clamp(150px, 44vw, 190px); flex: none; }
 .welcome-foot { display: flex; gap: 12px; align-items: center; margin: 18px 0 20px; }
 .cloud-chip { background: rgba(255,255,255,.14); color: #fff; padding: 6px 12px; border-radius: 999px; font-weight: 800; font-size: 14px; }
 .version, .version-tag { color: rgba(255,255,255,.6); font-size: 13px; font-weight: 800; }

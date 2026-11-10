@@ -7,6 +7,16 @@
 // Builds before v1.0 were numbered v1–v61 (v61.1 was the build renamed v1.0).
 export const CHANGELOG = [
   {
+    v: 'v2.1', date: '2026-11-09',
+    added: [
+      'A brand-new opening screen: the Academy at night, with a moonlit meadow, a pond and glowing crystals.',
+      'Watch for drifting clouds and mist, fireflies, and a trail of math magic from the wizard\u2019s wand.',
+    ],
+    changed: [
+      'Family cards now sit in the middle of the opening screen.',
+    ],
+  },
+  {
     v: 'v2.0', date: '2026-10-04',
     added: [
       'Rare pets each have their own signature move, and Epic pets have a once-per-battle Super Move!',
