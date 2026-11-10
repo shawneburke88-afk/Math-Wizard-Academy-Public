@@ -1,8 +1,7 @@
 // Welcome screen: pick your family, then enter its 4-digit PIN. New families and forgotten PINs are handled here.
 import { h, svgEl, clearUI, mount, toast, notice } from './dom.js';
-import { wizardSVG } from '../art/wizard.js';
 import { creatureSVG } from '../art/creatures.js';
-import { propSVG } from '../art/world.js';
+import { welcomeSceneSVG, SCENE } from '../art/welcome.js';
 import { sfx, unlockAudio } from '../core/sfx.js';
 import { families, refreshFamilies, createFamily, checkPin, setPin, openFamily, closeFamily, onlinePending, profiles, legacyProfiles, warmCloud, parseBackup, importBackup, markBackedUp } from '../core/save.js';
 import { pickBackupFile } from './parent.js';
@@ -13,16 +12,27 @@ import { GAME_VERSION } from '../core/version.js';
 export const CRESTS = ['numberling', 'patternkin', 'shapeshifter', 'datapup', 'meanicorn', 'primeflare', 'arborithm', 'golemetry'];
 const crestArt = (sp, stage = 2) => svgEl(creatureSVG(CRESTS.includes(sp) ? sp : 'numberling', stage, { mood: 'happy' }), 'crest');
 
-/** The welcome scene: the Academy under the stars with a wizard and pets. */
-function scene() {
-  return h('div.welcome-art',
-    h('div.w-moon'),
-    svgEl(propSVG('academy', 'academy'), 'w-academy'),
-    svgEl(wizardSVG({ skin: 2, hair: 1, hairColor: 3, robe: 0, hat: 0, hatColor: 0 }, { facing: 'right', pose: 'cast' }), 'w-wizard'),
-    svgEl(creatureSVG('numberling', 2, { mood: 'happy', facing: 'left' }), 'w-pet p1'),
-    svgEl(creatureSVG('hummbit', 1, { facing: 'right' }), 'w-pet p2'),
-    svgEl(creatureSVG('meanicorn', 2, { mood: 'happy', facing: 'left' }), 'w-pet p3'),
-    h('div.w-spark', '✦'), h('div.w-spark.s2', '✧'), h('div.w-spark.s3', '✦'));
+/** The welcome scene (art/welcome.js) as the screen's full background. `gap` is the empty space kept above the title:
+ *  the Academy part of the picture is fitted into it, and the meadow runs on down behind the title and the family cards.
+ *  Wide screens see more of the land to each side; narrow ones keep MINW in view and get more sky above. */
+let sceneMarkup = null;
+function scene(gap) {
+  sceneMarkup ||= welcomeSceneSVG();
+  const el = h('div.welcome-hero', { html: sceneMarkup });
+  const fit = () => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const top = gap.getBoundingClientRect().height || r.height * 0.46;
+    const s = Math.max(Math.min(top / SCENE.H, r.width / SCENE.MINW), r.width / (SCENE.X1 - SCENE.X0));   // screen px per scene unit
+    const w = r.width / s, y0 = Math.max(SCENE.TOP, SCENE.H - top / s);
+    const box = `${(SCENE.CX - w / 2).toFixed(1)} ${y0.toFixed(1)} ${w.toFixed(1)} ${(r.height / s).toFixed(1)}`;
+    for (const svg of el.querySelectorAll('svg.ws-svg')) svg.setAttribute('viewBox', box);
+    el.style.setProperty('--ws-s', s.toFixed(4));            // the mist layers place themselves from these two
+    el.style.setProperty('--ws-oy', (-y0 * s).toFixed(1));
+  };
+  requestAnimationFrame(fit);
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(el);
+  return el;
 }
 
 export function showWelcome({ onOpen }) {
@@ -33,16 +43,16 @@ export function showWelcome({ onOpen }) {
     const status = cloudStatus();
     const tiles = list.map((f) => h('button.family-tile', { onclick: () => { unlockAudio(); sfx.tap(); askPin(f); } },
       crestArt(f.crest), h('div.fname', f.name), h('div.finfo', `${(f.kids || []).length} wizard${(f.kids || []).length === 1 ? '' : 's'}`)));
-    mount(h('div.screen.welcome.night-bg.stars-bg',
-      scene(),
-      h('div.welcome-title', '✦ Math Wizard Academy ✦'),
+    const gap = h('div.welcome-gap');
+    mount(h('div.screen.welcome', scene(gap), h('div.welcome-body', gap,
+      h('div.welcome-logo', h('span.wl-spark', '✦'), h('span.welcome-title', { 'data-text': 'Math Wizard Academy' }, h('span.wt-fill', 'Math Wizard Academy')), h('span.wl-spark.s2', '✦')),
       h('div.welcome-sub', list.length ? 'Welcome back! Which family is playing?' : 'Welcome, young wizards! Start by making your family.'),
       h('div.family-list', ...tiles,
         h('button.family-tile.new', { onclick: () => { unlockAudio(); sfx.tap(); newFamily(); } }, h('div.plus', '+'), h('div.fname', 'New family'))),
       h('div.welcome-foot',
         h('button.btn.secondary.small.restore-btn', { onclick: () => { unlockAudio(); sfx.tap(); restoreFamily(); } }, '📂 Restore a backup'),
         h('span.cloud-chip.' + status, status === 'online' ? '☁️ Saves are stored online' : status === 'checking' ? '⏳ Checking online saves…' : '📱 Saves stay on this device'),
-        h('span.version', GAME_VERSION))));
+        h('span.version', GAME_VERSION)))));
     showPendingWhatsNew();
   };
   render();
